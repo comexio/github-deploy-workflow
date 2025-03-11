@@ -150,8 +150,6 @@ runs:
       sudo rm -rf /usr/share/dotnet
       sudo rm -rf /usr/share/swift
       sudo rm -rf /var/lib/apt/lists/*
-      sudo apt-get clean
-      df -h
     shell: bash
 
   - name: Build e Push da Imagem Docker (se aplicável)
@@ -233,6 +231,7 @@ runs:
   - name: Instalando OpenVPN
     shell: bash
     run: |
+      sudo apt-get update
       sudo apt-get install openvpn -y
 
   - name: Configurando a VPN (se necessário)
