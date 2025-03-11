@@ -142,6 +142,18 @@ runs:
       labels: |
         org.opencontainers.image.version=${{ env.TAG }}
 
+  - name: Free up disk space
+    run: |
+      echo "Cleaning up disk space..."
+      sudo rm -rf /usr/local/lib/android
+      sudo rm -rf /opt/ghc
+      sudo rm -rf /usr/share/dotnet
+      sudo rm -rf /usr/share/swift
+      sudo rm -rf /var/lib/apt/lists/*
+      sudo apt-get clean
+      df -h
+    shell: bash
+
   - name: Build e Push da Imagem Docker (se aplicável)
     if: ${{ inputs.DOCKERFILE_PATH != '' }}
     uses: docker/build-push-action@v3
