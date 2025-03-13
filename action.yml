@@ -158,11 +158,9 @@ runs:
     with:
       context: .
       file: ${{ inputs.DOCKERFILE_PATH }}
-      # tags: ${{ steps.meta.outputs.tags }}
       tags: |
         ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
-        ${{ steps.meta.outputs.tags }}
-      labels: ${{ steps.meta.outputs.labels }}
+      # labels: ${{ steps.meta.outputs.labels }}
       push: true
       build-args: |
         IMAGE=${{ inputs.BASE_IMAGE }}
