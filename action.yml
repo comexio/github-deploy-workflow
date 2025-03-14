@@ -391,9 +391,16 @@ runs:
         # Substituir :latest pela nova tag no Dockerfile
         sed -i "s|:latest|:${GITHUB_COMMIT}|g" /tmp/deploy/Dockerfile
 
+        # Determinar o diretório correto
+        TARGET_DIR="/home/ubuntu/log-os/.infra/homol"
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Branch é 'main', alterando destino para infra/prod..."
+          TARGET_DIR="/home/ubuntu/log-os/.infra/prod"
+        fi
+
         # Mover os arquivos para o destino correto
-        mv /tmp/deploy/Dockerfile /home/ubuntu/log-os/.infra/homol/php/Dockerfile
-        mv /tmp/deploy/docker-compose.yml /home/ubuntu/log-os/.infra/homol/docker-compose.yml
+        mv /tmp/deploy/Dockerfile "$TARGET_DIR/php/Dockerfile"
+        mv /tmp/deploy/docker-compose.yml "$TARGET_DIR/docker-compose.yml"
 
   - name: Subindo nova tag
     uses: appleboy/ssh-action@master
