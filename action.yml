@@ -203,26 +203,26 @@ runs:
       sudo rm -rf /var/lib/apt/lists/*
     shell: bash
 
-  - name: Build e Push da Imagem Docker (se aplicável)
-    if: ${{ inputs.DOCKERFILE_PATH != '' }}
-    uses: docker/build-push-action@v3
-    with:
-      context: .
-      file: ${{ inputs.DOCKERFILE_PATH }}
-      tags: |
-        ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
-        ${{ steps.meta.outputs.tags }}
-      labels: ${{ steps.meta.outputs.labels }}
-      push: true
-      build-args: |
-        IMAGE=${{ inputs.BASE_IMAGE }}
+  # - name: Build e Push da Imagem Docker (se aplicável)
+  #   if: ${{ inputs.DOCKERFILE_PATH != '' }}
+  #   uses: docker/build-push-action@v3
+  #   with:
+  #     context: .
+  #     file: ${{ inputs.DOCKERFILE_PATH }}
+  #     tags: |
+  #       ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
+  #       ${{ steps.meta.outputs.tags }}
+  #     labels: ${{ steps.meta.outputs.labels }}
+  #     push: true
+  #     build-args: |
+  #       IMAGE=${{ inputs.BASE_IMAGE }}
 
-  - name: Exportando Summary
-    run: |
-      echo "### Image tag :framed_picture:" >> $GITHUB_STEP_SUMMARY
-      # echo "$GITHUB_SHA" >> $GITHUB_STEP_SUMMARY
-      echo "${{ env.TAG }}" >> $GITHUB_STEP_SUMMARY
-    shell: bash
+  # - name: Exportando Summary
+  #   run: |
+  #     echo "### Image tag :framed_picture:" >> $GITHUB_STEP_SUMMARY
+  #     # echo "$GITHUB_SHA" >> $GITHUB_STEP_SUMMARY
+  #     echo "${{ env.TAG }}" >> $GITHUB_STEP_SUMMARY
+  #   shell: bash
 
   # ##################  DEPLOY IMAGE # ##################
 
