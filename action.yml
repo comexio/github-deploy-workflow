@@ -109,6 +109,25 @@ runs:
     env:
       GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
 
+  - name: Buscando Última Release do GitHub via API
+    if: startsWith(github.ref, 'refs/heads/main')
+    id: find-latest-release
+    shell: bash
+    run: |
+      TAG=$(curl -s -H "Authorization: Bearer ${{ inputs.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
+            jq -r '.tag_name')
+
+      if [[ -z "$TAG" || "$TAG" == "null" ]]; then
+        echo "::error::Nenhuma release encontrada!"
+        exit 1
+      fi
+
+      echo "TAG=$TAG" >> $GITHUB_ENV
+    env:
+      GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+
   - name: Configurando credenciais da AWS
     uses: aws-actions/configure-aws-credentials@v4
     with:
