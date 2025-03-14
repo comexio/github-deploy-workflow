@@ -82,6 +82,33 @@ runs:
     env:
       GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
 
+  - name: Definir Release como Latest
+    if: startsWith(github.ref, 'refs/heads/main')
+    shell: bash
+    run: |
+      echo "Verificando se a nova versão (${TAG}) é maior que a latest..."
+
+      # Obtém a versão mais recente marcada como "latest"
+      CURRENT_LATEST=$(gh release list --json tagName,isLatest | jq -r '.[] | select(.isLatest) | .tagName')
+
+      echo "Versão atual de latest: ${CURRENT_LATEST}"
+
+      # Função para comparar versões (considerando SemVer)
+      function version_greater_or_equal() {
+        printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1 | grep -q "^$1$"
+      }
+
+      # Se a nova versão for maior ou igual à latest, atualiza a tag latest
+      if version_greater_or_equal "${TAG}" "${CURRENT_LATEST}"; then
+        echo "A versão ${TAG} é mais recente que ${CURRENT_LATEST}. Atualizando latest..."
+        gh release edit "${TAG}" --prerelease=false --latest
+      else
+        echo "A versão ${TAG} é mais antiga que ${CURRENT_LATEST}. Apenas removendo pré-release."
+        gh release edit "${TAG}" --prerelease=false
+      fi
+    env:
+      GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+
   - name: Configurando credenciais da AWS
     uses: aws-actions/configure-aws-credentials@v4
     with:
@@ -160,7 +187,8 @@ runs:
       file: ${{ inputs.DOCKERFILE_PATH }}
       tags: |
         ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
-      # labels: ${{ steps.meta.outputs.labels }}
+        ${{ steps.meta.outputs.tags }}
+      labels: ${{ steps.meta.outputs.labels }}
       push: true
       build-args: |
         IMAGE=${{ inputs.BASE_IMAGE }}
@@ -438,33 +466,6 @@ runs:
       echo "Desconectando VPN..."
       sudo killall openvpn
       sleep 5
-
-  - name: Definir Release como Latest
-    if: github.ref == 'refs/heads/main'
-    shell: bash
-    run: |
-      echo "Verificando se a nova versão (${TAG}) é maior que a latest..."
-
-      # Obtém a versão mais recente marcada como "latest"
-      CURRENT_LATEST=$(gh release list --json tagName,isLatest | jq -r '.[] | select(.isLatest) | .tagName')
-
-      echo "Versão atual de latest: ${CURRENT_LATEST}"
-
-      # Função para comparar versões (considerando SemVer)
-      function version_greater_or_equal() {
-        printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1 | grep -q "^$1$"
-      }
-
-      # Se a nova versão for maior ou igual à latest, atualiza a tag latest
-      if version_greater_or_equal "${TAG}" "${CURRENT_LATEST}"; then
-        echo "A versão ${TAG} é mais recente que ${CURRENT_LATEST}. Atualizando latest..."
-        gh release edit "${TAG}" --prerelease=false --latest
-      else
-        echo "A versão ${TAG} é mais antiga que ${CURRENT_LATEST}. Apenas removendo pré-release."
-        gh release edit "${TAG}" --prerelease=false
-      fi
-    env:
-      GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
 
   - name: Criar PR para main se a branch for RC
     if: startsWith(github.ref, 'refs/heads/rc/')
