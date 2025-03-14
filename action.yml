@@ -411,9 +411,21 @@ runs:
       script: |
         set -e  # Encerra o script se qualquer comando falhar
 
+        # Definir diretórios padrão para ambiente HOMOL
         ENV_PATH="/home/ubuntu/log-os/.env"
         S3_ENV_PATH="s3://logcomex-environments-files/log-os/.env.homol"
         COMPOSE_DIR="/home/ubuntu/log-os/.infra/homol"
+
+        # Se estiver na branch main, usar ambiente PROD
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Branch é 'main', alterando para ambiente de produção..."
+          S3_ENV_PATH="s3://logcomex-environments-files/log-os/.env.prod"
+          COMPOSE_DIR="/home/ubuntu/log-os/.infra/prod"
+        fi
+
+        echo "Usando ENV_PATH: $ENV_PATH"
+        echo "Usando S3_ENV_PATH: $S3_ENV_PATH"
+        echo "Usando COMPOSE_DIR: $COMPOSE_DIR"
 
         echo "Baixando o arquivo de ambiente do S3..."
         if aws s3 ls "$S3_ENV_PATH" > /dev/null 2>&1; then
