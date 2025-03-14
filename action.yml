@@ -75,7 +75,6 @@ runs:
 
       if [[ -z "$TAG" || "$TAG" == "null" ]]; then
         echo "::error::Nenhuma pre-release encontrada!"
-        exit 1
       fi
 
       echo "TAG=$TAG" >> $GITHUB_ENV
