@@ -350,12 +350,23 @@ runs:
 
       echo "Cópia finalizada para todas as instâncias EC2."
 
+  - name: Criar lista de IPs formatada
+    shell: bash
+    run: |
+      if [[ $(echo ${{ env.EC2_IPS }} | wc -w) -gt 1 ]]; then
+        # Se houver mais de um IP, substitui espaços por vírgula
+        echo "EC2_IPS_COMMA=$(echo ${{ env.EC2_IPS }} | sed 's/ /,/g')" >> $GITHUB_ENV
+      else
+        # Se houver apenas um IP, mantém como está
+        echo "EC2_IPS_COMMA=${{ env.EC2_IPS }}" >> $GITHUB_ENV
+      fi
+
   - name: Manipulando tag nova no manifestos
     uses: appleboy/ssh-action@master
     with:
       username: ${{ inputs.SSH_USER }}
       key_path: ssh_key.pem
-      host: ${{ env.EC2_IPS }}
+      host: ${{ env.EC2_IPS_COMMA }}
       script: |
         set -e
         tar -xzf /tmp/deploy.tar.gz -C /tmp/
@@ -407,7 +418,7 @@ runs:
     with:
       username: ${{ inputs.SSH_USER }}
       key_path: ssh_key.pem
-      host: ${{ env.EC2_IPS }}
+      host: ${{ env.EC2_IPS_COMMA }}
       script: |
         set -e  # Encerra o script se qualquer comando falhar
 
@@ -461,7 +472,7 @@ runs:
     with:
       username: ${{ inputs.SSH_USER }}
       key_path: ssh_key.pem
-      host: ${{ env.EC2_IPS }}
+      host: ${{ env.EC2_IPS_COMMA }}
       script: |
         set -e  # Encerra o script se qualquer comando falhar
 
