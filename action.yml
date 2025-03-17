@@ -81,6 +81,7 @@ runs:
       fi
 
       echo "TAG_PRERELEASE=$TAG" >> $GITHUB_ENV
+      echo "TAG=$TAG_PRERELEASE" >> $GITHUB_ENV
     env:
       GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
 
