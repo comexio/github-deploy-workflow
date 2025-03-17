@@ -214,6 +214,7 @@ runs:
         ${{ steps.meta.outputs.tags }}
       labels: ${{ steps.meta.outputs.labels }}
       push: true
+      no-cache: true
       build-args: |
         IMAGE=${{ inputs.BASE_IMAGE }}
 
