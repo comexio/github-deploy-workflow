@@ -123,10 +123,10 @@ runs:
       # Se a nova versão for maior ou igual à latest, atualiza a tag latest
       if version_greater_or_equal "${TAG}" "${CURRENT_LATEST}"; then
         echo "A versão ${TAG} é mais recente que ${CURRENT_LATEST}. Atualizando latest..."
-        gh release edit "${TAG}" --prerelease=false --latest
+        # gh release edit "${TAG}" --prerelease=false --latest
       else
         echo "A versão ${TAG} é mais antiga que ${CURRENT_LATEST}. Apenas removendo pré-release."
-        gh release edit "${TAG}" --prerelease=false
+        # gh release edit "${TAG}" --prerelease=false
       fi
 
       # Define a variável TAG no ambiente para os próximos steps
@@ -469,14 +469,18 @@ runs:
 
         echo "Processo finalizado com sucesso."
 
+  - name: Definir variável do nome do arquivo
+    shell: bash
+    run: echo "S3_FILE=builds/build-$(date +%Y%m%d%H%M%S).tar.gz" >> $GITHUB_ENV
+
   - name: Preparando build na instância primária e enviando para o S3
     shell: bash
     run: |
       PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr -d ' ')
       S3_BUCKET="log-os-publish-artifacts"
-      S3_PATH="builds/build-$(date +%Y%m%d%H%M%S).tar.gz"
 
       echo "PRIMARY_HOST: $PRIMARY_HOST"
+      echo "Upload para S3: s3://$S3_BUCKET/${{ env.S3_FILE }}"
 
       ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" \
       "set -e && \
@@ -489,9 +493,9 @@ runs:
 
       echo "Fazendo upload do build para o S3..."
       ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" \
-      aws s3 cp /tmp/build.tar.gz s3://$S3_BUCKET/$S3_PATH
+      "aws s3 cp /tmp/build.tar.gz s3://$S3_BUCKET/${{ env.S3_FILE }} --acl private"
 
-      echo "Upload para S3 concluído: s3://$S3_BUCKET/$S3_PATH"
+      echo "Upload para S3 concluído: s3://$S3_BUCKET/${{ env.S3_FILE }}"
 
   - name: Distribuir build para outras instâncias
     shell: bash
@@ -499,7 +503,6 @@ runs:
       PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr -d ' ')
       OTHER_HOSTS=$(echo "${{ env.EC2_IPS_COMMA }}" | sed "s/$PRIMARY_HOST,//" | tr ',' ' ')
       S3_BUCKET="log-os-publish-artifacts"
-      S3_PATH="builds/build-$(date +%Y%m%d%H%M%S).tar.gz"
 
       if [ -z "$OTHER_HOSTS" ]; then
         echo "Não há outras instâncias para copiar o build. Finalizando."
@@ -508,11 +511,12 @@ runs:
 
       echo "PRIMARY_HOST: $PRIMARY_HOST"
       echo "Outras instâncias: $OTHER_HOSTS"
+      echo "Baixando do S3: s3://$S3_BUCKET/${{ env.S3_FILE }}"
 
       for HOST in $OTHER_HOSTS; do
         echo "Baixando build do S3 em $HOST..."
         ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
-        "aws s3 cp s3://$S3_BUCKET/$S3_PATH /tmp/build.tar.gz && \
+        "aws s3 cp s3://$S3_BUCKET/${{ env.S3_FILE }} /tmp/build.tar.gz && \
         echo 'Arquivo baixado do S3.'"
 
         echo "Copiando build para o contêiner logos-app em $HOST..."
