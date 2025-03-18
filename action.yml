@@ -520,12 +520,13 @@ runs:
         echo 'Arquivo baixado do S3.'"
 
         echo "Copiando build para o contêiner logos-app em $HOST..."
-        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
+        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "  ${{ inputs.SSH_USER }}@$HOST" \
         "docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz && \
-        docker exec logos-app tar -xzf /tmp/build.tar.gz -C / && \
+        docker exec logos-app mkdir -p /var/www/public && \
+        docker exec logos-app tar -xzf /tmp/build.tar.gz -C /var/www/public && \
         docker exec logos-app rm /tmp/build.tar.gz"
 
-        echo "Build instalado em $HOST!"
+        echo "Build instalado corretamente em $HOST na pasta /var/www/public!"
       done
 
   - name: Preparando ambiente pós new tag
