@@ -479,11 +479,25 @@ runs:
         set -e
 
         COMPOSER_CONTAINERS=("logos-app" "logos-reverb" "logos-supervisor")
-        PRIMARY_HOST=$(echo "$EC2_IPS_COMMA" | cut -d',' -f1 | tr -d ' ')
+
+        # Garante que EC2_IPS_COMMA não está vazio antes de extrair o primeiro IP
+        if [ -z "$EC2_IPS_COMMA" ]; then
+          echo "Erro: EC2_IPS_COMMA está vazio!"
+          exit 1
+        fi
+
+        # Extrai corretamente o primeiro IP, removendo espaços extras
+        PRIMARY_HOST=$(echo "$EC2_IPS_COMMA" | awk -F',' '{print $1}' | tr -d ' ')
         LOCAL_IP=$(hostname -I | awk '{print $1}')
 
         echo "PRIMARY_HOST definido como: $PRIMARY_HOST"
         echo "LOCAL_IP definido como: $LOCAL_IP"
+
+        # Verifica se PRIMARY_HOST foi definido corretamente
+        if [ -z "$PRIMARY_HOST" ]; then
+          echo "Erro: PRIMARY_HOST está vazio! Verifique EC2_IPS_COMMA."
+          exit 1
+        fi
 
         if [ "$LOCAL_IP" == "$PRIMARY_HOST" ]; then
           echo "Executando build do Node.js na instância primária ($LOCAL_IP)..."
