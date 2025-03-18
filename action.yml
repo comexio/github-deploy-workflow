@@ -498,12 +498,12 @@ runs:
       PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr -d ' ')
       echo "PRIMARY_HOST: $PRIMARY_HOST"
 
-      ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" << 'EOF'
+      ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" <<-EOF
         set -e
         echo "Rodando build do Node.js na instância primária ($PRIMARY_HOST)..."
         docker exec logos-app npm install --silent
         docker exec logos-app npm run build
-        docker exec logos-app tar -czf /tmp/build.tar.gz public/
+        docker exec logos-app tar -czf /tmp/build.tar.gz /app/public /app/node_modules
         echo "Build finalizado e compactado."
       EOF
 
@@ -526,7 +526,7 @@ runs:
         scp -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST:/tmp/build.tar.gz" "/tmp/build.tar.gz"
         scp -o StrictHostKeyChecking=no -i ssh_key.pem "/tmp/build.tar.gz" "${{ inputs.SSH_USER }}@$HOST:/tmp/build.tar.gz"
 
-        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" << 'EOF'
+        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" <<-EOF
           set -e
           echo "Extraindo build em $HOST..."
           docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz
