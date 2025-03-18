@@ -479,22 +479,33 @@ runs:
         set -e
 
         COMPOSER_CONTAINERS=("logos-app" "logos-reverb" "logos-supervisor")
-        PRIMARY_HOST=$(echo "$EC2_IPS_COMMA" | cut -d',' -f1)
+        PRIMARY_HOST=$(echo "$EC2_IPS_COMMA" | cut -d',' -f1 | tr -d ' ')
         LOCAL_IP=$(hostname -I | awk '{print $1}')
 
+        echo "PRIMARY_HOST definido como: $PRIMARY_HOST"
+        echo "LOCAL_IP definido como: $LOCAL_IP"
+
         if [ "$LOCAL_IP" == "$PRIMARY_HOST" ]; then
-          echo "Rodando build do Node.js na primeira instância..."
+          echo "Executando build do Node.js na instância primária ($LOCAL_IP)..."
           docker exec logos-app npm install --silent
           docker exec logos-app npm run build
-          docker exec logos-app tar -czf /tmp/build.tar.gz /app/public
+          docker exec logos-app tar -czf /tmp/build.tar.gz /app/public /app/node_modules
         fi
 
         if [ "$LOCAL_IP" != "$PRIMARY_HOST" ]; then
-          echo "Baixando build da primeira instância..."
+          echo "Baixando build da instância primária ($PRIMARY_HOST)..."
+
+          # Testa a conectividade SSH antes de copiar
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 "${SSH_USER}@${PRIMARY_HOST}" "echo 'Conexão OK'" || {
+            echo "Falha ao conectar à instância primária ($PRIMARY_HOST). Verifique a rede ou as permissões SSH."
+            exit 1
+          }
+
           scp -o StrictHostKeyChecking=no "${SSH_USER}@${PRIMARY_HOST}:/tmp/build.tar.gz" /tmp/build.tar.gz || {
             echo "Erro ao copiar arquivos da instância primária."
             exit 1
           }
+
           docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz
           docker exec logos-app tar -xzf /tmp/build.tar.gz -C /
           docker exec logos-app rm /tmp/build.tar.gz
