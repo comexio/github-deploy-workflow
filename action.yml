@@ -204,20 +204,20 @@ runs:
       sudo rm -rf /var/lib/apt/lists/*
     shell: bash
 
-  # - name: Build e Push da Imagem Docker (se aplicável)
-  #   if: ${{ inputs.DOCKERFILE_PATH != '' }}
-  #   uses: docker/build-push-action@v3
-  #   with:
-  #     context: .
-  #     file: ${{ inputs.DOCKERFILE_PATH }}
-  #     tags: |
-  #       ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
-  #       ${{ steps.meta.outputs.tags }}
-  #     labels: ${{ steps.meta.outputs.labels }}
-  #     push: true
-  #     no-cache: true
-  #     build-args: |
-  #       IMAGE=${{ inputs.BASE_IMAGE }}
+  - name: Build e Push da Imagem Docker (se aplicável)
+    if: ${{ inputs.DOCKERFILE_PATH != '' }}
+    uses: docker/build-push-action@v3
+    with:
+      context: .
+      file: ${{ inputs.DOCKERFILE_PATH }}
+      tags: |
+        ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
+        ${{ steps.meta.outputs.tags }}
+      labels: ${{ steps.meta.outputs.labels }}
+      push: true
+      no-cache: true
+      build-args: |
+        IMAGE=${{ inputs.BASE_IMAGE }}
 
   - name: Exportando Summary
     run: |
