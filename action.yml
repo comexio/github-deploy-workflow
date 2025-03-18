@@ -123,10 +123,10 @@ runs:
       # Se a nova versão for maior ou igual à latest, atualiza a tag latest
       if version_greater_or_equal "${TAG}" "${CURRENT_LATEST}"; then
         echo "A versão ${TAG} é mais recente que ${CURRENT_LATEST}. Atualizando latest..."
-        # gh release edit "${TAG}" --prerelease=false --latest
+        gh release edit "${TAG}" --prerelease=false --latest
       else
         echo "A versão ${TAG} é mais antiga que ${CURRENT_LATEST}. Apenas removendo pré-release."
-        # gh release edit "${TAG}" --prerelease=false
+        gh release edit "${TAG}" --prerelease=false
       fi
 
       # Define a variável TAG no ambiente para os próximos steps
@@ -204,20 +204,20 @@ runs:
   #     sudo rm -rf /var/lib/apt/lists/*
   #   shell: bash
 
-  # - name: Build e Push da Imagem Docker (se aplicável)
-  #   if: ${{ inputs.DOCKERFILE_PATH != '' }}
-  #   uses: docker/build-push-action@v3
-  #   with:
-  #     context: .
-  #     file: ${{ inputs.DOCKERFILE_PATH }}
-  #     tags: |
-  #       ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
-  #       ${{ steps.meta.outputs.tags }}
-  #     labels: ${{ steps.meta.outputs.labels }}
-  #     push: true
-  #     no-cache: true
-  #     build-args: |
-  #       IMAGE=${{ inputs.BASE_IMAGE }}
+  - name: Build e Push da Imagem Docker (se aplicável)
+    if: ${{ inputs.DOCKERFILE_PATH != '' }}
+    uses: docker/build-push-action@v3
+    with:
+      context: .
+      file: ${{ inputs.DOCKERFILE_PATH }}
+      tags: |
+        ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
+        ${{ steps.meta.outputs.tags }}
+      labels: ${{ steps.meta.outputs.labels }}
+      push: true
+      no-cache: true
+      build-args: |
+        IMAGE=${{ inputs.BASE_IMAGE }}
 
   - name: Exportando Summary
     run: |
