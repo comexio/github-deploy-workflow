@@ -507,9 +507,9 @@ runs:
   - name: Distribuir build para outras instâncias
     shell: bash
     run: |
-      PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr -d ' ')
+      PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr ',' ' ')
       OTHER_HOSTS=$(echo "${{ env.EC2_IPS_COMMA }}" | sed "s/$PRIMARY_HOST,//" | tr ',' ' ')
-      S3_BUCKET="log-os-publish-artifacts" # Corrigido para ser o mesmo bucket do upload
+      S3_BUCKET="log-os-publish-artifacts"
 
       if [ -z "$OTHER_HOSTS" ]; then
         echo "Não há outras instâncias para copiar o build. Finalizando."
@@ -526,14 +526,18 @@ runs:
         "aws s3 cp s3://$S3_BUCKET/${{ env.S3_FILE }} /tmp/build.tar.gz && \
         echo 'Arquivo baixado do S3.'"
 
+        echo "Removendo arquivos antigos antes da extração..."
+        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
+        "docker exec logos-app rm -rf /var/www/public/*"
+
         echo "Copiando build para o contêiner logos-app em $HOST..."
         ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
         "docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz && \
-        docker exec logos-app mkdir -p /var/www/public && \
-        docker exec logos-app tar -xzf /tmp/build.tar.gz -C /var/www/public && \
-        docker exec logos-app rm /tmp/build.tar.gz"
+        docker exec logos-app tar -xzf /tmp/build.tar.gz -C /var/www/public --strip-components=1 && \
+        docker exec logos-app rm /tmp/build.tar.gz && \
+        docker exec logos-app chown -R www-data:www-data /var/www/public"
 
-        echo "Build instalado corretamente em $HOST na pasta /var/www/public!"
+        echo "Build atualizado corretamente em $HOST na pasta /var/www/public!"
       done
 
   - name: Preparando ambiente pós new tag
