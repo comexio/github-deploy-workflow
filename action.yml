@@ -497,12 +497,16 @@ runs:
 
       echo "Upload para S3 concluído: s3://$S3_BUCKET/${{ env.S3_FILE }}"
 
+  - name: Configurar permissões da chave SSH
+    shell: bash
+    run: chmod 600 ssh_key.pem
+
   - name: Distribuir build para outras instâncias
     shell: bash
     run: |
       PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr -d ' ')
       OTHER_HOSTS=$(echo "${{ env.EC2_IPS_COMMA }}" | sed "s/$PRIMARY_HOST,//" | tr ',' ' ')
-      S3_BUCKET="log-os-publish-artifacts"
+      S3_BUCKET="meu-bucket-build"
 
       if [ -z "$OTHER_HOSTS" ]; then
         echo "Não há outras instâncias para copiar o build. Finalizando."
@@ -520,7 +524,7 @@ runs:
         echo 'Arquivo baixado do S3.'"
 
         echo "Copiando build para o contêiner logos-app em $HOST..."
-        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "  ${{ inputs.SSH_USER }}@$HOST" \
+        ssh -vvv -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
         "docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz && \
         docker exec logos-app mkdir -p /var/www/public && \
         docker exec logos-app tar -xzf /tmp/build.tar.gz -C /var/www/public && \
