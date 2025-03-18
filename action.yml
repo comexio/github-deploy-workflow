@@ -469,29 +469,6 @@ runs:
 
         echo "Processo finalizado com sucesso."
 
-  - name: Preparando ambiente pós new tag
-    uses: appleboy/ssh-action@master
-    with:
-      username: ${{ inputs.SSH_USER }}
-      key_path: ssh_key.pem
-      host: ${{ env.EC2_IPS_COMMA }}
-      script: |
-        set -e
-        COMPOSER_CONTAINERS=("logos-app" "logos-reverb" "logos-supervisor")
-
-        echo "Ajustando permissões e rodando otimizações..."
-        docker exec logos-app chown www-data:www-data bootstrap/cache -R
-        for container in "${COMPOSER_CONTAINERS[@]}"; do
-          if docker ps --format '{{.Names}}' | grep -q "$container"; then
-            docker exec "$container" composer install --no-interaction --prefer-dist --optimize-autoloader
-          fi
-        done
-        docker exec logos-app php artisan config:cache
-        docker exec logos-app php artisan view:cache
-        docker exec logos-app chown www-data:www-data storage -R
-
-        echo "Processo concluído com sucesso."
-
   - name: Preparando build na instância primária
     shell: bash
     run: |
@@ -537,6 +514,29 @@ runs:
         docker exec logos-app tar -xzf /tmp/build.tar.gz -C / && \
         docker exec logos-app rm /tmp/build.tar.gz"
       done
+
+  - name: Preparando ambiente pós new tag
+    uses: appleboy/ssh-action@master
+    with:
+      username: ${{ inputs.SSH_USER }}
+      key_path: ssh_key.pem
+      host: ${{ env.EC2_IPS_COMMA }}
+      script: |
+        set -e
+        COMPOSER_CONTAINERS=("logos-app" "logos-reverb" "logos-supervisor")
+
+        echo "Ajustando permissões e rodando otimizações..."
+        docker exec logos-app chown www-data:www-data bootstrap/cache -R
+        for container in "${COMPOSER_CONTAINERS[@]}"; do
+          if docker ps --format '{{.Names}}' | grep -q "$container"; then
+            docker exec "$container" composer install --no-interaction --prefer-dist --optimize-autoloader
+          fi
+        done
+        docker exec logos-app php artisan config:cache
+        docker exec logos-app php artisan view:cache
+        docker exec logos-app chown www-data:www-data storage -R
+
+        echo "Processo concluído com sucesso."
 
   - name: Encerrando a VPN (se aplicável)
     if: always() && inputs.OVPN_CONFIG_FILE != ''
