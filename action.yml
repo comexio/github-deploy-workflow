@@ -471,12 +471,12 @@ runs:
 
   - name: Preparando ambiente pós new tag
     uses: appleboy/ssh-action@master
+    env:
+      EC2_IPS_COMMA: ${{ env.EC2_IPS_COMMA }}
     with:
       username: ${{ inputs.SSH_USER }}
       key_path: ssh_key.pem
       host: ${{ env.EC2_IPS_COMMA }}
-      envs:
-        EC2_IPS_COMMA: ${{ env.EC2_IPS_COMMA }}
       script: |
         set -e
 
