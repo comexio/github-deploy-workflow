@@ -480,17 +480,21 @@ runs:
 
         COMPOSER_CONTAINERS=("logos-app" "logos-reverb" "logos-supervisor")
         PRIMARY_HOST=$(echo "$EC2_IPS_COMMA" | cut -d',' -f1)
+        LOCAL_IP=$(hostname -I | awk '{print $1}')
 
-        if [ "$(hostname -I | awk '{print $1}')" == "$PRIMARY_HOST" ]; then
+        if [ "$LOCAL_IP" == "$PRIMARY_HOST" ]; then
           echo "Rodando build do Node.js na primeira instância..."
           docker exec logos-app npm install --silent
           docker exec logos-app npm run build
-          docker exec logos-app tar -czf /tmp/build.tar.gz /app/public /app/node_modules
+          docker exec logos-app tar -czf /tmp/build.tar.gz /app/public
         fi
 
-        if [ "$(hostname -I | awk '{print $1}')" != "$PRIMARY_HOST" ]; then
+        if [ "$LOCAL_IP" != "$PRIMARY_HOST" ]; then
           echo "Baixando build da primeira instância..."
-          scp -o StrictHostKeyChecking=no -i ssh_key.pem "${SSH_USER}@${PRIMARY_HOST}:/tmp/build.tar.gz" /tmp/build.tar.gz
+          scp -o StrictHostKeyChecking=no "${SSH_USER}@${PRIMARY_HOST}:/tmp/build.tar.gz" /tmp/build.tar.gz || {
+            echo "Erro ao copiar arquivos da instância primária."
+            exit 1
+          }
           docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz
           docker exec logos-app tar -xzf /tmp/build.tar.gz -C /
           docker exec logos-app rm /tmp/build.tar.gz
