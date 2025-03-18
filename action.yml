@@ -498,7 +498,7 @@ runs:
       PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr -d ' ')
       echo "PRIMARY_HOST: $PRIMARY_HOST"
 
-      ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" <<-EOF
+      ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" <<EOF
         set -e
         echo "Rodando build do Node.js na instância primária ($PRIMARY_HOST)..."
         docker exec logos-app npm install --silent
@@ -523,17 +523,17 @@ runs:
 
       for HOST in $OTHER_HOSTS; do
         echo "Copiando build para $HOST..."
-        scp -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST:/tmp/build.tar.gz" "/tmp/build.tar.gz"
-        scp -o StrictHostKeyChecking=no -i ssh_key.pem "/tmp/build.tar.gz" "${{ inputs.SSH_USER }}@$HOST:/tmp/build.tar.gz"
+        scp -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST:/tmp/build.tar.gz" "/tmp/build.tar.gz" || { echo "Erro no SCP do PRIMARY_HOST"; exit 1; }
+        scp -o StrictHostKeyChecking=no -i ssh_key.pem "/tmp/build.tar.gz" "${{ inputs.SSH_USER }}@$HOST:/tmp/build.tar.gz" || { echo "Erro no SCP para $HOST"; exit 1; }
 
-        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" <<-EOF
+        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" <<EOF
           set -e
           echo "Extraindo build em $HOST..."
-          docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz
-          docker exec logos-app tar -xzf /tmp/build.tar.gz -C /
-          docker exec logos-app rm /tmp/build.tar.gz
+            docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz
+            docker exec logos-app tar -xzf /tmp/build.tar.gz -C /
+            docker exec logos-app rm /tmp/build.tar.gz
         EOF
-      done
+        done
 
   - name: Encerrando a VPN (se aplicável)
     if: always() && inputs.OVPN_CONFIG_FILE != ''
