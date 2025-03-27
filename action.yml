@@ -203,27 +203,17 @@ runs:
       labels: |
         org.opencontainers.image.version=${{ env.TAG }}
 
-  - name: Gerando Tags e Labels para usar na imagem Supervisor
-    id: meta_supervisor
-    uses: docker/metadata-action@v4
-    with:
-      images: ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}
-      flavor: latest=true
-      tags: |
-        type=raw,value=${{ env.TAG }}
-        type=sha,format=long,prefix=
-      labels: |
-        org.opencontainers.image.version=${{ env.TAG }}
-
-  # - name: Free up disk space
-  #   run: |
-  #     echo "Cleaning up disk space..."
-  #     sudo rm -rf /usr/local/lib/android
-  #     sudo rm -rf /opt/ghc
-  #     sudo rm -rf /usr/share/dotnet
-  #     sudo rm -rf /usr/share/swift
-  #     sudo rm -rf /var/lib/apt/lists/*
-  #   shell: bash
+  # - name: Gerando Tags e Labels para usar na imagem Supervisor
+  #   id: meta_supervisor
+  #   uses: docker/metadata-action@v4
+  #   with:
+  #     images: ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}
+  #     flavor: latest=true
+  #     tags: |
+  #       type=raw,value=${{ env.TAG }}
+  #       type=sha,format=long,prefix=
+  #     labels: |
+  #       org.opencontainers.image.version=${{ env.TAG }}
 
   - name: Build e Push da Imagem Docker (se aplicável)
     if: ${{ inputs.DOCKERFILE_PATH != '' }}
@@ -240,20 +230,20 @@ runs:
       build-args: |
         IMAGE=${{ inputs.BASE_IMAGE }}
 
-  - name: Build e Push da Imagem Docker (logos-supervisor)
-    if: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH != '' }}
-    uses: docker/build-push-action@v3
-    with:
-      context: .
-      file: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH }}
-      tags: |
-        ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}:${{ env.TAG }}
-        ${{ steps.meta_supervisor.outputs.tags }}
-      labels: ${{ steps.meta_supervisor.outputs.labels }}
-      push: true
-      no-cache: true
-      build-args: |
-        IMAGE=${{ inputs.SUPERVISOR_BASE_IMAGE }}
+  # - name: Build e Push da Imagem Docker (logos-supervisor)
+  #   if: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH != '' }}
+  #   uses: docker/build-push-action@v3
+  #   with:
+  #     context: .
+  #     file: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH }}
+  #     tags: |
+  #       ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}:${{ env.TAG }}
+  #       ${{ steps.meta_supervisor.outputs.tags }}
+  #     labels: ${{ steps.meta_supervisor.outputs.labels }}
+  #     push: true
+  #     no-cache: true
+  #     build-args: |
+  #       IMAGE=${{ inputs.SUPERVISOR_BASE_IMAGE }}
 
   - name: Exportando Summary
     run: |
