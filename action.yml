@@ -203,6 +203,18 @@ runs:
       labels: |
         org.opencontainers.image.version=${{ env.TAG }}
 
+  - name: Gerando Tags e Labels para usar na imagem Supervisor
+    id: meta_supervisor
+    uses: docker/metadata-action@v4
+    with:
+      images: ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}
+      flavor: latest=true
+      tags: |
+        type=raw,value=${{ env.TAG }}
+        type=sha,format=long,prefix=
+      labels: |
+        org.opencontainers.image.version=${{ env.TAG }}
+
   # - name: Free up disk space
   #   run: |
   #     echo "Cleaning up disk space..."
@@ -236,6 +248,8 @@ runs:
       file: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH }}
       tags: |
         ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}:${{ env.TAG }}
+        ${{ steps.meta_supervisor.outputs.tags }}
+      labels: ${{ steps.meta_supervisor.outputs.labels }}
       push: true
       no-cache: true
       build-args: |
