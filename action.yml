@@ -27,10 +27,19 @@ inputs:
   IMAGE_NAME:
     required: false
     description: Nome da imagem no ECR
+  SUPERVISOR_IMAGE_NAME:
+    required: false
+    description: Nome da imagem no ECR
   DOCKERFILE_PATH:
     required: false
     description: Caminho para o Dockerfile
+  SUPERVISOR_DOCKERFILE_PATH:
+    required: false
+    description: Caminho para o Dockerfile
   BASE_IMAGE:
+    required: false
+    description: Imagem base (se necessário)
+  SUPERVISOR_BASE_IMAGE:
     required: false
     description: Imagem base (se necessário)
   DEPLOY_FILES:
@@ -219,6 +228,19 @@ runs:
       build-args: |
         IMAGE=${{ inputs.BASE_IMAGE }}
 
+  - name: Build e Push da Imagem Docker (logos-supervisor)
+    if: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH != '' }}
+    uses: docker/build-push-action@v3
+    with:
+      context: .
+      file: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH }}
+      tags: |
+        ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}:${{ env.TAG }}
+      push: true
+      no-cache: true
+      build-args: |
+        IMAGE=${{ inputs.SUPERVISOR_BASE_IMAGE }}
+
   - name: Exportando Summary
     run: |
       echo "### Image tag :framed_picture:" >> $GITHUB_STEP_SUMMARY
@@ -236,7 +258,8 @@ runs:
 
       for file in ${{ inputs.DEPLOY_FILES }}; do
         echo "Copiando $file para /tmp/deploy/"
-        cp "$file" /tmp/deploy/ || { echo "Erro ao copiar $file"; exit 1; }
+        mkdir -p "/tmp/deploy/$(dirname "$file")"
+        cp "$file" "/tmp/deploy/$file" || { echo "Erro ao copiar $file"; exit 1; }
       done
 
       tar -czf /tmp/deploy.tar.gz -C /tmp/ deploy/
@@ -401,8 +424,8 @@ runs:
             exit 1
         fi
 
-        # Substituir :latest pela nova tag no Dockerfile
-        sed -i "s|:latest|:${GITHUB_COMMIT}|g" /tmp/deploy/Dockerfile
+        # Substituir :latest pela nova tag
+        find /tmp/deploy -type f -name 'Dockerfile' -exec sed -i "s|:latest|:${GITHUB_COMMIT}|g" {} +
 
         # Determinar o diretório correto
         TARGET_DIR="/home/ubuntu/log-os/.infra/homol"
@@ -411,8 +434,15 @@ runs:
           TARGET_DIR="/home/ubuntu/log-os/.infra/prod"
         fi
 
-        # Mover os arquivos para o destino correto
-        mv /tmp/deploy/Dockerfile "$TARGET_DIR/php/Dockerfile"
+        # Criar diretórios
+        mkdir -p "$TARGET_DIR/php"
+        mkdir -p "$TARGET_DIR/supervisor"
+
+        # Mover os Dockerfiles preservando origem
+        mv /tmp/deploy/.infra/homol/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
+        mv /tmp/deploy/.infra/homol/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
+
+        # Mover o docker-compose.yml
         mv /tmp/deploy/docker-compose.yml "$TARGET_DIR/docker-compose.yml"
 
   - name: Subindo nova tag
