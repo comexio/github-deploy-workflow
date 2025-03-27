@@ -565,8 +565,6 @@ runs:
 
   - name: Rebuild supervisor
     uses: appleboy/ssh-action@master
-    env:
-      GITHUB_REF_NAME: ${{ github.ref_name }}
     with:
       username: ${{ inputs.SSH_USER }}
       key_path: ssh_key.pem
@@ -574,6 +572,7 @@ runs:
       script: |
         set -e
 
+        # Determina o caminho com base na branch
         if [ "${GITHUB_REF_NAME}" = "main" ]; then
           COMPOSE_DIR="log-os/.infra/prod/supervisor"
         else
@@ -583,13 +582,14 @@ runs:
         cd $COMPOSE_DIR
 
         if docker ps --format '{{.Names}}' | grep -q '^logos-supervisor$'; then
-          echo "Container logos-supervisor encontrado. Executando composer install..."
+          echo "Container logos-supervisor encontrado. Executando composer install e recriando container..."
 
           docker exec logos-supervisor composer install --no-interaction --prefer-dist --optimize-autoloader
-        fi
 
-        echo "Recriando e rebuildando logos-supervisor..."
-        docker-compose up -d --build --force-recreate logos-supervisor
+          docker-compose up -d --force-recreate
+        else
+          echo "Container logos-supervisor não encontrado. Nada será feito."
+        fi
 
   - name: Encerrando a VPN (se aplicável)
     if: always() && inputs.OVPN_CONFIG_FILE != ''
