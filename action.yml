@@ -572,6 +572,25 @@ runs:
       script: |
         set -e
 
+        # Determina o caminho com base na branch
+        if [ "${GITHUB_REF_NAME}" = "main" ]; then
+          COMPOSE_DIR="log-os/.infra/prod/supervisor"
+        else
+          COMPOSE_DIR="log-os/.infra/homol/supervisor"
+        fi
+
+        cd $COMPOSE_DIR
+
+        if docker ps --format '{{.Names}}' | grep -q '^logos-supervisor$'; then
+          echo "Container logos-supervisor encontrado. Executando composer install e recriando container..."
+
+          docker exec logos-supervisor composer install --no-interaction --prefer-dist --optimize-autoloader
+
+          docker-compose up -d --force-recreate
+        else
+          echo "Container logos-supervisor não encontrado. Nada será feito."
+        fi
+
   - name: Encerrando a VPN (se aplicável)
     if: always() && inputs.OVPN_CONFIG_FILE != ''
     shell: bash
