@@ -263,7 +263,11 @@ runs:
       for file in ${{ inputs.DEPLOY_FILES }}; do
         echo "Copiando $file para /tmp/deploy/"
         mkdir -p "/tmp/deploy/$(dirname "$file")"
-        cp "$file" "/tmp/deploy/$file" || { echo "Erro ao copiar $file"; exit 1; }
+        
+        cp "$file" "./$file" "/tmp/deploy/$file" || { echo "Erro ao copiar $file"; exit 1; }
+        ls -la /tmp/deploy
+        ls -la /tmp/deploy/.infra/homol/php
+        ls -la /tmp/deploy/.infra/homol/supervisor
       done
 
       tar -czf /tmp/deploy.tar.gz -C /tmp/ deploy/
