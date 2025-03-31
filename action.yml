@@ -184,11 +184,11 @@ runs:
       EOF
     shell: bash
 
-  - name: Autenticando no ECR
-    if: ${{ inputs.ECR_REGISTRY != '' }}
-    uses: docker/login-action@v3
-    with:
-      registry: ${{ inputs.ECR_REGISTRY }}
+  # - name: Autenticando no ECR
+  #   if: ${{ inputs.ECR_REGISTRY != '' }}
+  #   uses: docker/login-action@v3
+  #   with:
+  #     registry: ${{ inputs.ECR_REGISTRY }}
 
   # - name: Gerando Tags e Labels para usar na imagem
   #   if: ${{ inputs.DOCKERFILE_PATH != '' }}
