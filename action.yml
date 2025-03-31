@@ -580,12 +580,12 @@ runs:
 
         if [ "${GITHUB_REF_NAME}" = "main" ]; then
           echo "Branch 'main' detectada. Rodando em todos os containers..."
-          docker exec logos-app composer install --no-scripts --no-interaction --prefer-dist 
-          docker exec logos-reverb composer install --no-scripts --no-interaction --prefer-dist 
-          docker exec logos-supervisor composer install --no-scripts --no-interaction --prefer-dist 
+          docker exec logos-app composer install --no-interaction --prefer-dist --optimize-autoloader
+          docker exec logos-reverb composer install --no-interaction --prefer-dist --optimize-autoloader
+          docker exec logos-supervisor composer install --no-interaction --prefer-dist --optimize-autoloader
         else
           echo "Branch '${GITHUB_REF_NAME}' detectada. Rodando apenas no logos-app..."
-          docker exec logos-app composer install --no-scripts --no-interaction --prefer-dist
+          docker exec logos-app composer install --no-interaction --prefer-dist --optimize-autoloader
         fi
 
         docker exec logos-app php artisan config:cache
@@ -615,7 +615,7 @@ runs:
   #       if docker ps --format '{{.Names}}' | grep -q '^logos-supervisor$'; then
   #         echo "Container logos-supervisor encontrado. Executando composer install e recriando container..."
 
-  #         docker exec logos-supervisor composer install --no-scripts --no-interaction --prefer-dist 
+  #         docker exec logos-supervisor composer install --no-interaction --prefer-dist --optimize-autoloader
 
   #         docker-compose up -d --force-recreate
   #       else
