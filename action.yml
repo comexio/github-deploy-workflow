@@ -253,9 +253,9 @@ runs:
     run: |
       aws ecr get-login-password --region sa-east-1 | docker login --username AWS --password-stdin 081818032380.dkr.ecr.sa-east-1.amazonaws.com
       cd .infra/homol/supervisor
-      docker build -t ecr-hml-log-os-base-php .
-      docker tag ecr-hml-log-os-base-php:latest 081818032380.dkr.ecr.sa-east-1.amazonaws.com/ecr-hml-log-os-base-php:latest
-      docker push 081818032380.dkr.ecr.sa-east-1.amazonaws.com/ecr-hml-log-os-base-php:latest
+      docker build -t ecr-hml-log-os-base-supervisor .
+      docker tag ecr-hml-log-os-base-supervisor:${{ env.TAG }} 081818032380.dkr.ecr.sa-east-1.amazonaws.com/ecr-hml-log-os-base-supervisor:${{ env.TAG }}
+      docker push 081818032380.dkr.ecr.sa-east-1.amazonaws.com/ecr-hml-log-os-base-supervisor:${{ env.TAG }}
   # - name: Criando e Armazenando Artefato de Deploy
   #   if: ${{ inputs.DEPLOY_FILES != '' }}
   #   run: |
