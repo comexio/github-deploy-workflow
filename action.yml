@@ -262,12 +262,9 @@ runs:
 
       for file in ${{ inputs.DEPLOY_FILES }}; do
         echo "Copiando $file para /tmp/deploy/"
-        mkdir -p "/tmp/deploy/$(dirname "$file")"
-        
-        cp "$file" "./$file" "/tmp/deploy/$file" || { echo "Erro ao copiar $file"; exit 1; }
-        ls -la /tmp/deploy
-        ls -la /tmp/deploy/.infra/homol/php
-        ls -la /tmp/deploy/.infra/homol/supervisor
+        DEST_DIR="/tmp/deploy/$(dirname "$file")"
+        mkdir -p "$DEST_DIR"
+        cp "$file" "$DEST_DIR/" || { echo "Erro ao copiar $file"; exit 1; }
       done
 
       tar -czf /tmp/deploy.tar.gz -C /tmp/ deploy/
@@ -411,20 +408,15 @@ runs:
         echo "Baixando todas as branches e tags remotas..."
         git fetch --all --prune
 
-        # Commitando mudanças antes de trocar de branch
         echo "Commitando mudanças antes de trocar para $BRANCH_NAME..."
         git config --global user.email "github-actions@github.com"
         git config --global user.name "GitHub Actions"
-
         git add .
         git commit -m "Atualização automática do Dockerfile antes de trocar para a branch $BRANCH_NAME" || echo "Nenhuma mudança para commit."
 
-        # Verifica se a branch existe remotamente antes de tentar fazer o checkout
         if git ls-remote --exit-code --heads origin "$BRANCH_NAME" >/dev/null; then
             echo "Trocando para a branch $BRANCH_NAME..."
             git checkout "$BRANCH_NAME"
-
-            # Forçar a branch local a ficar idêntica à remota
             git reset --hard origin/$BRANCH_NAME
             git pull origin "$BRANCH_NAME"
         else
@@ -437,21 +429,18 @@ runs:
 
         # Determinar o diretório correto
         TARGET_DIR="/home/ubuntu/log-os/.infra/homol"
-        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+        if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
           echo "Branch é 'main', alterando destino para infra/prod..."
           TARGET_DIR="/home/ubuntu/log-os/.infra/prod"
         fi
 
-        # Criar diretórios
         mkdir -p "$TARGET_DIR/php"
         mkdir -p "$TARGET_DIR/supervisor"
 
-        # Mover os Dockerfiles preservando origem
+        # Mover os Dockerfiles e compose corrigido
         mv /tmp/deploy/.infra/homol/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
         mv /tmp/deploy/.infra/homol/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
-
-        # Mover o docker-compose.yml
-        mv /tmp/deploy/docker-compose.yml "$TARGET_DIR/docker-compose.yml"
+        mv /tmp/deploy/.infra/homol/docker-compose.yml "$TARGET_DIR/docker-compose.yml"
 
   - name: Subindo nova tag
     uses: appleboy/ssh-action@master
