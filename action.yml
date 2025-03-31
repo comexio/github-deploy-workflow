@@ -574,15 +574,20 @@ runs:
       host: ${{ env.EC2_IPS_COMMA }}
       script: |
         set -e
-        COMPOSER_CONTAINERS=("logos-app" "logos-reverb" "logos-supervisor")
 
         echo "Ajustando permissões e rodando otimizações..."
         docker exec logos-app chown www-data:www-data bootstrap/cache -R
-        for container in "${COMPOSER_CONTAINERS[@]}"; do
-          if docker ps --format '{{.Names}}' | grep -q "$container"; then
-            docker exec "$container" composer install --no-interaction --prefer-dist --optimize-autoloader
-          fi
-        done
+
+        if [ "${GITHUB_REF_NAME}" = "main" ]; then
+          echo "Branch 'main' detectada. Rodando em todos os containers..."
+          docker exec logos-app composer install --no-interaction --prefer-dist --optimize-autoloader
+          docker exec logos-reverb composer install --no-interaction --prefer-dist --optimize-autoloader
+          docker exec logos-supervisor composer install --no-interaction --prefer-dist --optimize-autoloader
+        else
+          echo "Branch '${GITHUB_REF_NAME}' detectada. Rodando apenas no logos-app..."
+          docker exec logos-app composer install --no-interaction --prefer-dist --optimize-autoloader
+        fi
+
         docker exec logos-app php artisan config:cache
         docker exec logos-app php artisan view:cache
         docker exec logos-app chown www-data:www-data storage -R
