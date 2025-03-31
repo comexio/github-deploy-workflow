@@ -191,17 +191,17 @@ runs:
       registry: ${{ inputs.ECR_REGISTRY }}
 
   # TAGEAR A IMAGEM COM A TAG PRERELEASE QUE BUSCAMOS DO GITHUB
-  - name: Gerando Tags e Labels para usar na imagem
-    id: meta
-    uses: docker/metadata-action@v4
-    with:
-      images: ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}
-      flavor: latest=true
-      tags: |
-        type=raw,value=${{ env.TAG }}
-        type=sha,format=long,prefix=
-      labels: |
-        org.opencontainers.image.version=${{ env.TAG }}
+  # - name: Gerando Tags e Labels para usar na imagem
+  #   id: meta
+  #   uses: docker/metadata-action@v4
+  #   with:
+  #     images: ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}
+  #     flavor: latest=true
+  #     tags: |
+  #       type=raw,value=${{ env.TAG }}
+  #       type=sha,format=long,prefix=
+  #     labels: |
+  #       org.opencontainers.image.version=${{ env.TAG }}
 
   # - name: Gerando Tags e Labels para usar na imagem Supervisor
   #   id: meta_supervisor
@@ -215,20 +215,20 @@ runs:
   #     labels: |
   #       org.opencontainers.image.version=${{ env.TAG }}
 
-  - name: Build e Push da Imagem Docker (se aplicável)
-    if: ${{ inputs.DOCKERFILE_PATH != '' }}
-    uses: docker/build-push-action@v3
-    with:
-      context: .
-      file: ${{ inputs.DOCKERFILE_PATH }}
-      tags: |
-        ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
-        ${{ steps.meta.outputs.tags }}
-      labels: ${{ steps.meta.outputs.labels }}
-      push: true
-      no-cache: true
-      build-args: |
-        IMAGE=${{ inputs.BASE_IMAGE }}
+  # - name: Build e Push da Imagem Docker (se aplicável)
+  #   if: ${{ inputs.DOCKERFILE_PATH != '' }}
+  #   uses: docker/build-push-action@v3
+  #   with:
+  #     context: .
+  #     file: ${{ inputs.DOCKERFILE_PATH }}
+  #     tags: |
+  #       ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
+  #       ${{ steps.meta.outputs.tags }}
+  #     labels: ${{ steps.meta.outputs.labels }}
+  #     push: true
+  #     no-cache: true
+  #     build-args: |
+  #       IMAGE=${{ inputs.BASE_IMAGE }}
 
   # - name: Build e Push da Imagem Docker (logos-supervisor)
   #   if: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH != '' }}
