@@ -218,35 +218,44 @@ runs:
   #     build-args: |
   #       IMAGE=${{ inputs.BASE_IMAGE }}
 
-  - name: Gerando Tags e Labels para usar na imagem Supervisor
-    if: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH != '' }}
-    id: meta_supervisor
-    uses: docker/metadata-action@v4
-    with:
-      images: ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}
-      flavor: latest=true
-      tags: |
-        type=raw,value=${{ env.TAG }}
-        type=sha,format=long,prefix=
-      labels: |
-        org.opencontainers.image.version=${{ env.TAG }}
+  # - name: Gerando Tags e Labels para usar na imagem Supervisor
+  #   if: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH != '' }}
+  #   id: meta_supervisor
+  #   uses: docker/metadata-action@v4
+  #   with:
+  #     images: ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}
+  #     flavor: latest=true
+  #     tags: |
+  #       type=raw,value=${{ env.TAG }}
+  #       type=sha,format=long,prefix=
+  #     labels: |
+  #       org.opencontainers.image.version=${{ env.TAG }}
 
-  - name: Build e Push da Imagem Docker (logos-supervisor)
-    if: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH != '' }}
-    uses: docker/build-push-action@v3
-    with:
-      context: .
-      file: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH }}
-      tags: |
-        ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}:${{ env.TAG }}
-        ${{ steps.meta_supervisor.outputs.tags }}
-      labels: ${{ steps.meta_supervisor.outputs.labels }}
-      push: true
-      no-cache: true
-      build-args: |
-        IMAGE=${{ inputs.SUPERVISOR_BASE_IMAGE }}
+  # - name: Build e Push da Imagem Docker (logos-supervisor)
+  #   if: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH != '' }}
+  #   uses: docker/build-push-action@v3
+  #   with:
+  #     context: .
+  #     file: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH }}
+  #     tags: |
+  #       ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}:${{ env.TAG }}
+  #       ${{ steps.meta_supervisor.outputs.tags }}
+  #     labels: ${{ steps.meta_supervisor.outputs.labels }}
+  #     push: true
+  #     no-cache: true
+  #     build-args: |
+  #       IMAGE=${{ inputs.SUPERVISOR_BASE_IMAGE }}
   # ##################  DEPLOY IMAGE # ##################
 
+  - name: test
+    if: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH != '' }}
+    shell: bash
+    run: |
+      aws ecr get-login-password --region sa-east-1 | docker login --username AWS --password-stdin 081818032380.dkr.ecr.sa-east-1.amazonaws.com
+      cd .infra/homol/supervisor
+      docker build -t ecr-hml-log-os-base-php .
+      docker tag ecr-hml-log-os-base-php:latest 081818032380.dkr.ecr.sa-east-1.amazonaws.com/ecr-hml-log-os-base-php:latest
+      docker push 081818032380.dkr.ecr.sa-east-1.amazonaws.com/ecr-hml-log-os-base-php:latest
   # - name: Criando e Armazenando Artefato de Deploy
   #   if: ${{ inputs.DEPLOY_FILES != '' }}
   #   run: |
