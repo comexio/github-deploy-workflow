@@ -300,436 +300,433 @@ runs:
       INSTANCE_INFO=$(aws ec2 describe-instances \
         --region ${{ inputs.AWS_REGION }} \
         --filters "Name=tag:Name,Values=*${{ inputs.SERVER_LIST }}*" "Name=instance-state-name,Values=running" \
-        --query "Reservations[].Instances[].{InstanceId:InstanceId,PublicIpAddress:PublicIpAddress,Tags:Tags}" \
+        --query "Reservations[].Instances[].{InstanceId:InstanceId,PublicIpAddress:PublicIpAddress}" \
         --output json)
 
       echo "Dados das instâncias encontradas: $INSTANCE_INFO"
 
-      get_ips_by_name() {
-        local name="$1"
-        echo "$INSTANCE_INFO" | jq -r --arg NAME "$name" '
-          .[] | select(.Tags[]?.Key == "Name" and .Tags[]?.Value == $NAME) | .PublicIpAddress
-        '
-      }
+      INSTANCE_IDS=$(echo "$INSTANCE_INFO" | jq -r '.[] | .InstanceId')
+      IP_ADDRESSES=$(echo "$INSTANCE_INFO" | jq -r '.[] | .PublicIpAddress' | grep -v null)
 
-      IP_APP=$(get_ips_by_name "ec2-prd-log-os-app" | paste -sd "," -)
-      IP_SUPERVISOR=$(get_ips_by_name "ec2-prd-log-os-supervisor" | paste -sd "," -)
-
-      if [[ -z "$IP_APP" && -z "$IP_SUPERVISOR" ]]; then
-        echo "::error::Nenhuma das instâncias esperadas foi encontrada com IP público."
+      if [[ -z "$IP_ADDRESSES" ]]; then
+        echo "::error::Nenhuma instância ativa com IP público encontrada."
         exit 1
       fi
 
-      echo "IP da ec2-prd-log-os-app: $IP_APP"
-      echo "IP da ec2-prd-log-os-supervisor: $IP_SUPERVISOR"
-
-      echo "EC2_APP_IP=$IP_APP" >> $GITHUB_ENV
-      echo "EC2_SUPERVISOR_IP=$IP_SUPERVISOR" >> $GITHUB_ENV
-  # - name: Instalando OpenVPN
-  #   shell: bash
-  #   run: |
-  #     sudo apt-get update
-  #     sudo apt-get install openvpn -y
-
-  # - name: Configurando a VPN (se necessário)
-  #   if: ${{ inputs.OVPN_CONFIG_FILE != '' }}
-  #   shell: bash
-  #   run: |
-  #     echo "${{ inputs.OVPN_CERT_PASS }}" > vpn_pass.txt
-  #     echo "${{ inputs.OVPN_CONFIG_FILE }}" > cicd.ovpn
-
-  #     # Adiciona todas as rotas dos servidores no arquivo de configuração
-  #     for IP in $EC2_IPS; do
-  #       echo "route $IP 255.255.255.255" >> cicd.ovpn
-  #     done
-
-  #     echo "route-nopull" >> cicd.ovpn
-
-  #     sudo openvpn --config cicd.ovpn --askpass vpn_pass.txt --daemon
-  #     sleep 5
-
-  #     # Verificação da VPN
-  #     if ! ip address | grep -q " tun"; then
-  #       echo "::error::Interface da VPN não encontrada!"
-  #       exit 1
-  #     fi
-
-  # - name: Salvando chave SSH
-  #   shell: bash
-  #   run: |
-  #     echo "${{ inputs.SSH_KEY_FILE }}" > ssh_key.pem
-  #     chmod 600 ssh_key.pem
-
-  # - name: Baixando artefato de Deploy
-  #   uses: actions/download-artifact@v4
-  #   with:
-  #     name: deploy
-
-  # - name: Copiando o arquivo de Deploy para as instâncias EC2
-  #   shell: bash
-  #   run: |
-  #     # Verifica se a variável EC2_IPS está definida
-  #     if [ -z "$EC2_IPS" ]; then
-  #       echo "Erro: Nenhum IP de instância EC2 foi fornecido."
-  #       exit 1
-  #     fi
-
-  #     # Verifica se o arquivo deploy.tar.gz existe antes de copiar
-  #     if [ ! -f "deploy.tar.gz" ]; then
-  #       echo "Erro: O arquivo deploy.tar.gz não foi encontrado."
-  #       exit 1
-  #     fi
-
-  #     # Define as opções do SCP para maior segurança e eficiência
-  #     SCP_OPTIONS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ssh_key.pem"
-
-  #     for IP in $EC2_IPS; do
-  #       echo "Copiando deploy.tar.gz para $IP..."
-
-  #       # Tenta copiar o arquivo e verifica se teve sucesso
-  #       if scp $SCP_OPTIONS deploy.tar.gz ${{ inputs.SSH_USER }}@$IP:/tmp/; then
-  #         echo "Arquivo copiado com sucesso para $IP."
-  #       else
-  #         echo "Erro ao copiar para $IP. Verifique a conexão SSH."
-  #         exit 1
-  #       fi
-  #     done
-
-  #     echo "Cópia finalizada para todas as instâncias EC2."
-
-  # - name: Criar lista de IPs formatada
-  #   shell: bash
-  #   run: |
-  #     if [[ $(echo ${{ env.EC2_IPS }} | wc -w) -gt 1 ]]; then
-  #       # Se houver mais de um IP, substitui espaços por vírgula
-  #       echo "EC2_IPS_COMMA=$(echo ${{ env.EC2_IPS }} | sed 's/ /,/g')" >> $GITHUB_ENV
-  #     else
-  #       # Se houver apenas um IP, mantém como está
-  #       echo "EC2_IPS_COMMA=${{ env.EC2_IPS }}" >> $GITHUB_ENV
-  #     fi
-
-  # - name: Manipulando tag nova no manifestos
-  #   uses: appleboy/ssh-action@master
-  #   with:
-  #     username: ${{ inputs.SSH_USER }}
-  #     key_path: ssh_key.pem
-  #     host: ${{ env.EC2_IPS_COMMA }}
-  #     script: |
-  #       set -e
-  #       tar -xzf /tmp/deploy.tar.gz -C /tmp/
-  #       export GITHUB_COMMIT=${{ env.TAG }}
-  #       BRANCH_NAME="rc/$GITHUB_COMMIT"
-  #       # BRANCH_NAME="${GITHUB_REF##*/}"
-
-  #       cd /home/ubuntu/log-os/
-
-  #       echo "Baixando todas as branches e tags remotas..."
-  #       git fetch --all --prune
-
-  #       echo "Commitando mudanças antes de trocar para $BRANCH_NAME..."
-  #       git config --global user.email "github-actions@github.com"
-  #       git config --global user.name "GitHub Actions"
-  #       git add .
-  #       git commit -m "Atualização automática do Dockerfile antes de trocar para a branch $BRANCH_NAME" || echo "Nenhuma mudança para commit."
-
-  #       if git ls-remote --exit-code --heads origin "$BRANCH_NAME" >/dev/null; then
-  #           echo "Trocando para a branch $BRANCH_NAME..."
-  #           git checkout "$BRANCH_NAME"
-  #           git reset --hard origin/$BRANCH_NAME
-  #           git pull origin "$BRANCH_NAME"
-  #       else
-  #           echo "Erro: A branch '$BRANCH_NAME' não existe remotamente."
-  #           exit 1
-  #       fi
-
-  #       # Substituir :latest pela nova tag
-  #       find /tmp/deploy -type f -name 'Dockerfile' -exec sed -i "s|:latest|:${GITHUB_COMMIT}|g" {} +
-
-  #       TARGET_DIR="/home/ubuntu/log-os/.infra/homol"
-
-  #       if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
-  #         echo "Branch é 'main', copiando para .infra/prod"
-  #         TARGET_DIR="/home/ubuntu/log-os/.infra/prod"
-
-  #         mkdir -p "$TARGET_DIR/php"
-  #         mkdir -p "$TARGET_DIR/supervisor"
-
-  #         mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
-  #         mv /tmp/deploy/php/default.conf "$TARGET_DIR/php/default.conf"
-  #         mv /tmp/deploy/php/docker-compose.yml "$TARGET_DIR/php/docker-compose.yml"
-
-  #         mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
-  #         mv /tmp/deploy/supervisor/docker-compose.yml "$TARGET_DIR/supervisor/docker-compose.yml"
-  #         mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
-
-  #       else
-  #         echo "Branch '$BRANCH_NAME', copiando para .infra/homol"
-
-  #         mkdir -p "$TARGET_DIR/nginx"
-  #         mkdir -p "$TARGET_DIR/php"
-  #         mkdir -p "$TARGET_DIR/supervisor"
-
-  #         mv /tmp/deploy/docker-compose.yml "$TARGET_DIR/docker-compose.yml"
-  #         mv /tmp/deploy/nginx/default.conf "$TARGET_DIR/nginx/default.conf"
-  #         mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
-  #         mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
-  #         mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
-  #       fi
-
-  # - name: Subindo nova tag
-  #   uses: appleboy/ssh-action@master
-  #   with:
-  #     username: ${{ inputs.SSH_USER }}
-  #     key_path: ssh_key.pem
-  #     host: ${{ env.EC2_IPS_COMMA }}
-  #     script: |
-  #       set -e
-
-  #       echo "Definindo utilitário para verificar containers..."
-  #       container_exists() {
-  #         docker ps --format '{{.Names}}' | grep -q "^$1$"
-  #       }
-
-  #       ENV_PATH="/home/ubuntu/log-os/.env"
-  #       S3_ENV_PATH="s3://logcomex-environments-files/log-os/.env.homol"
-
-  #       if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-  #         echo "Branch é 'main', alterando para ambiente de produção..."
-  #         S3_ENV_PATH="s3://logcomex-environments-files/log-os/.env.prod"
-  #       fi
-
-  #       echo "Baixando o arquivo de ambiente do S3..."
-  #       if aws s3 ls "$S3_ENV_PATH" > /dev/null 2>&1; then
-  #         aws s3 cp "$S3_ENV_PATH" "$ENV_PATH"
-  #       else
-  #         echo "Erro: O arquivo $S3_ENV_PATH não foi encontrado no S3."
-  #         exit 1
-  #       fi
-
-  #       if container_exists logos-app; then
-  #         echo "Subindo serviços PHP..."
-  #         cd /home/ubuntu/log-os/.infra/prod/php
-  #         docker-compose up -d --force-recreate
-  #         echo "Aguardando containers iniciarem..."
-  #         sleep 5
-  #         echo "Copiando arquivo .env para dentro do container logos-app..."
-  #         docker cp "$ENV_PATH" logos-app:/var/www/.env
-  #       else
-  #         echo "Erro: O container logos-app não está rodando. Não foi possível copiar o .env."
-  #         exit 0
-  #       fi
-
-  #       if container_exists logos-supervisor; then
-  #         cd /home/ubuntu/log-os/.infra/prod/supervisor
-  #         docker-compose up -d --force-recreate
-  #         echo "Aguardando containers iniciarem..."
-  #         sleep 5
-  #         echo "Copiando arquivo .env para dentro do container logos-supervisor..."
-  #         docker cp "$ENV_PATH" logos-supervisor:/var/www/.env
-  #       else
-  #         echo "Erro: O container logos-supervisor não está rodando. Não foi possível copiar o .env."
-  #         exit 0
-  #       fi
-
-  #       echo "Processo finalizado com sucesso."
-
-  # - name: Definir variável do nome do arquivo
-  #   shell: bash
-  #   run: |
-  #     export S3_FILE="builds/build-$(date +%Y%m%d%H%M%S).tar.gz"
-  #     echo "S3_FILE=$S3_FILE" >> $GITHUB_ENV
-  #     echo "Nome do arquivo para upload e download: $S3_FILE"
-
-  # - name: Preparando build na instância primária e enviando para o S3
-  #   shell: bash
-  #   run: |
-  #     PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr -d ' ')
-  #     S3_BUCKET="log-os-publish-artifacts"
-
-  #     echo "PRIMARY_HOST: $PRIMARY_HOST"
-  #     echo "Upload para S3: s3://$S3_BUCKET/${{ env.S3_FILE }}"
-
-  #     ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" \
-  #     "set -e && \
-  #     echo 'Rodando build do Node.js na instância primária ($PRIMARY_HOST)...' && \
-  #     docker exec logos-app npm install --silent && \
-  #     docker exec logos-app npm run build && \
-  #     docker exec logos-app tar -czf /tmp/build.tar.gz public && \
-  #     docker cp logos-app:/tmp/build.tar.gz /tmp/build.tar.gz && \
-  #     echo 'Build finalizado e copiado para a instância primária.'"
-
-  #     echo "Fazendo upload do build para o S3..."
-  #     ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" \
-  #     "aws s3 cp /tmp/build.tar.gz s3://$S3_BUCKET/${{ env.S3_FILE }} --acl private"
-
-  #     echo "Upload para S3 concluído: s3://$S3_BUCKET/${{ env.S3_FILE }}"
-
-  # - name: Configurar permissões da chave SSH
-  #   shell: bash
-  #   run: chmod 600 ssh_key.pem
-
-  # - name: Distribuir build para outras instâncias
-  #   shell: bash
-  #   run: |
-  #     PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr ',' ' ')
-  #     OTHER_HOSTS=$(echo "${{ env.EC2_IPS_COMMA }}" | sed "s/$PRIMARY_HOST,//" | tr ',' ' ')
-  #     S3_BUCKET="log-os-publish-artifacts"
-
-  #     if [ -z "$OTHER_HOSTS" ]; then
-  #       echo "Não há outras instâncias para copiar o build. Finalizando."
-  #       exit 0
-  #     fi
-
-  #     echo "PRIMARY_HOST: $PRIMARY_HOST"
-  #     echo "Outras instâncias: $OTHER_HOSTS"
-  #     echo "Baixando do S3: s3://$S3_BUCKET/${{ env.S3_FILE }}"
-
-  #     for HOST in $OTHER_HOSTS; do
-  #       echo "Baixando build do S3 em $HOST..."
-  #       ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
-  #       "aws s3 cp s3://$S3_BUCKET/${{ env.S3_FILE }} /tmp/build.tar.gz && \
-  #       echo 'Arquivo baixado do S3.'"
-
-  #       echo "Removendo arquivos antigos antes da extração..."
-  #       ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
-  #       "docker exec logos-app rm -rf /var/www/public/*"
-
-  #       echo "Copiando build para o contêiner logos-app em $HOST..."
-  #       ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
-  #       "docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz && \
-  #       docker exec logos-app tar -xzf /tmp/build.tar.gz -C /var/www/public --strip-components=1 && \
-  #       docker exec logos-app rm /tmp/build.tar.gz && \
-  #       docker exec logos-app chown -R www-data:www-data /var/www/public"
-
-  #       echo "Build atualizado corretamente em $HOST na pasta /var/www/public!"
-  #     done
-
-  # - name: Preparando ambiente pós new tag
-  #   uses: appleboy/ssh-action@master
-  #   with:
-  #     username: ${{ inputs.SSH_USER }}
-  #     key_path: ssh_key.pem
-  #     host: ${{ env.EC2_IPS_COMMA }}
-  #     script: |
-  #       set -e
-
-  #       echo "Definindo utilitário para verificar containers..."
-  #       container_exists() {
-  #         docker ps --format '{{.Names}}' | grep -q "^$1$"
-  #       }
-
-  #       echo "Verificando containers disponíveis..."
-
-  #       if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-  #         echo "Branch 'main' detectada. Rodando em todos os containers (se existirem)..."
-
-  #         if container_exists logos-app; then
-  #           echo "Executando comandos no logos-app..."
-  #           docker exec logos-app composer install --no-interaction --prefer-dist
-  #           docker exec logos-app php artisan config:cache
-  #           docker exec logos-app php artisan view:cache
-  #           docker exec logos-app chown www-data:www-data storage -R
-  #           docker exec logos-app chown www-data:www-data bootstrap/cache -R
-  #         else
-  #           echo "Container logos-app não está rodando, ignorando."
-  #         fi
-
-  #         if container_exists logos-reverb; then
-  #           echo "Executando composer install no logos-reverb..."
-  #           docker exec logos-reverb composer install --no-interaction --prefer-dist
-  #         else
-  #           echo "Container logos-reverb não está rodando, ignorando."
-  #         fi
-
-  #         if container_exists logos-supervisor; then
-  #           echo "Executando composer install no logos-supervisor..."
-  #           docker exec logos-supervisor composer install --no-interaction --prefer-dist
-  #         else
-  #           echo "Container logos-supervisor não está rodando, ignorando."
-  #         fi
-
-  #       else
-  #         echo "Branch não é main, rodando apenas no logos-app (se existir)..."
-
-  #         if container_exists logos-app; then
-  #           echo "Executando comandos no logos-app..."
-  #           docker exec logos-app composer install --no-interaction --prefer-dist
-  #           docker exec logos-app php artisan config:cache
-  #           docker exec logos-app php artisan view:cache
-  #           docker exec logos-app chown www-data:www-data storage -R
-  #           docker exec logos-app chown www-data:www-data bootstrap/cache -R
-  #         else
-  #           echo "Container logos-app não está rodando, ignorando."
-  #         fi
-  #       fi
-
-  #       echo "Processo concluído com sucesso."
-
-  # - name: Rebuild supervisor
-  #   uses: appleboy/ssh-action@master
-  #   with:
-  #     username: ${{ inputs.SSH_USER }}
-  #     key_path: ssh_key.pem
-  #     host: ${{ env.EC2_IPS_COMMA }}
-  #     script: |
-  #       set -e
-
-  #       # Determina o caminho com base na branch
-  #       if [ "${GITHUB_REF_NAME}" = "main" ]; then
-  #         COMPOSE_DIR="log-os/.infra/prod/supervisor"
-  #         RUN_COMPOSER=true
-  #       else
-  #         COMPOSE_DIR="log-os/.infra/homol/supervisor"
-  #         RUN_COMPOSER=false
-  #       fi
-
-  #       cd $COMPOSE_DIR
-
-  #       if docker ps --format '{{.Names}}' | grep -q '^logos-supervisor$'; then
-  #         echo "Container logos-supervisor encontrado."
-
-  #         if [ "$RUN_COMPOSER" = true ]; then
-  #           echo "Executando composer install..."
-  #           docker exec logos-supervisor composer install --no-interaction --prefer-dist --optimize-autoloader
-  #         else
-  #           echo "Branch diferente de main. Pulando composer install."
-  #         fi
-
-  #         echo "Recriando container..."
-  #         docker-compose up -d --force-recreate
-  #       else
-  #         echo "Container logos-supervisor não encontrado. Nada será feito."
-  #       fi
-
-  # - name: Encerrando a VPN
-  #   if: always() && inputs.OVPN_CONFIG_FILE != ''
-  #   shell: bash
-  #   run: |
-  #     echo "Desconectando VPN..."
-  #     sudo killall openvpn
-  #     sleep 5
-
-  # - name: Criar PR para main se a branch for RC
-  #   if: startsWith(github.ref, 'refs/heads/rc/')
-  #   id: create-pr
-  #   shell: bash
-  #   run: |
-  #     CURRENT_BRANCH=$(echo "${GITHUB_REF#refs/heads/}")
-  #     echo "Branch atual: $CURRENT_BRANCH"
-
-  #     PR_TITLE="[RC] branch $CURRENT_BRANCH to Main"
-  #     PR_BODY="Pull Request RC to Main"
-
-  #     echo "Verificando se a PR já existe..."
-
-  #     EXISTING_PR=$(gh pr list --base main --head "$CURRENT_BRANCH" --json number --jq '.[0].number')
-
-  #     if [[ -n "$EXISTING_PR" ]]; then
-  #       echo "Pull Request já existe: #$EXISTING_PR"
-  #       exit 0
-  #     fi
-
-  #     echo "Criando PR: $PR_TITLE"
-  #     gh pr create --base="main" --head="$CURRENT_BRANCH" --title="$PR_TITLE" --body="$PR_BODY"
-  #   env:
-  #     GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+      echo "Instâncias encontradas:"
+      echo "$INSTANCE_IDS"
+      echo "IPs encontrados:"
+      echo "$IP_ADDRESSES"
+
+      # Exporta os IPs para serem usados nos próximos steps
+      echo "EC2_IPS=$(echo "$IP_ADDRESSES" | tr '\n' ' ')" >> $GITHUB_ENV
+
+  - name: Instalando OpenVPN
+    shell: bash
+    run: |
+      sudo apt-get update
+      sudo apt-get install openvpn -y
+
+  - name: Configurando a VPN (se necessário)
+    if: ${{ inputs.OVPN_CONFIG_FILE != '' }}
+    shell: bash
+    run: |
+      echo "${{ inputs.OVPN_CERT_PASS }}" > vpn_pass.txt
+      echo "${{ inputs.OVPN_CONFIG_FILE }}" > cicd.ovpn
+
+      # Adiciona todas as rotas dos servidores no arquivo de configuração
+      for IP in $EC2_IPS; do
+        echo "route $IP 255.255.255.255" >> cicd.ovpn
+      done
+
+      echo "route-nopull" >> cicd.ovpn
+
+      sudo openvpn --config cicd.ovpn --askpass vpn_pass.txt --daemon
+      sleep 5
+
+      # Verificação da VPN
+      if ! ip address | grep -q " tun"; then
+        echo "::error::Interface da VPN não encontrada!"
+        exit 1
+      fi
+
+  - name: Salvando chave SSH
+    shell: bash
+    run: |
+      echo "${{ inputs.SSH_KEY_FILE }}" > ssh_key.pem
+      chmod 600 ssh_key.pem
+
+  - name: Baixando artefato de Deploy
+    uses: actions/download-artifact@v4
+    with:
+      name: deploy
+
+  - name: Copiando o arquivo de Deploy para as instâncias EC2
+    shell: bash
+    run: |
+      # Verifica se a variável EC2_IPS está definida
+      if [ -z "$EC2_IPS" ]; then
+        echo "Erro: Nenhum IP de instância EC2 foi fornecido."
+        exit 1
+      fi
+
+      # Verifica se o arquivo deploy.tar.gz existe antes de copiar
+      if [ ! -f "deploy.tar.gz" ]; then
+        echo "Erro: O arquivo deploy.tar.gz não foi encontrado."
+        exit 1
+      fi
+
+      # Define as opções do SCP para maior segurança e eficiência
+      SCP_OPTIONS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ssh_key.pem"
+
+      for IP in $EC2_IPS; do
+        echo "Copiando deploy.tar.gz para $IP..."
+
+        # Tenta copiar o arquivo e verifica se teve sucesso
+        if scp $SCP_OPTIONS deploy.tar.gz ${{ inputs.SSH_USER }}@$IP:/tmp/; then
+          echo "Arquivo copiado com sucesso para $IP."
+        else
+          echo "Erro ao copiar para $IP. Verifique a conexão SSH."
+          exit 1
+        fi
+      done
+
+      echo "Cópia finalizada para todas as instâncias EC2."
+
+  - name: Criar lista de IPs formatada
+    shell: bash
+    run: |
+      if [[ $(echo ${{ env.EC2_IPS }} | wc -w) -gt 1 ]]; then
+        # Se houver mais de um IP, substitui espaços por vírgula
+        echo "EC2_IPS_COMMA=$(echo ${{ env.EC2_IPS }} | sed 's/ /,/g')" >> $GITHUB_ENV
+      else
+        # Se houver apenas um IP, mantém como está
+        echo "EC2_IPS_COMMA=${{ env.EC2_IPS }}" >> $GITHUB_ENV
+      fi
+
+  - name: Manipulando tag nova no manifestos
+    uses: appleboy/ssh-action@master
+    with:
+      username: ${{ inputs.SSH_USER }}
+      key_path: ssh_key.pem
+      host: ${{ env.EC2_IPS_COMMA }}
+      script: |
+        set -e
+        tar -xzf /tmp/deploy.tar.gz -C /tmp/
+        export GITHUB_COMMIT=${{ env.TAG }}
+        BRANCH_NAME="rc/$GITHUB_COMMIT"
+
+        cd /home/ubuntu/log-os/
+
+        echo "Baixando todas as branches e tags remotas..."
+        git fetch --all --prune
+
+        echo "Commitando mudanças antes de trocar para $BRANCH_NAME..."
+        git config --global user.email "github-actions@github.com"
+        git config --global user.name "GitHub Actions"
+        git add .
+        git commit -m "Atualização automática do Dockerfile antes de trocar para a branch $BRANCH_NAME" || echo "Nenhuma mudança para commit."
+
+        if git ls-remote --exit-code --heads origin "$BRANCH_NAME" >/dev/null; then
+            echo "Trocando para a branch $BRANCH_NAME..."
+            git checkout "$BRANCH_NAME"
+            git reset --hard origin/$BRANCH_NAME
+            git pull origin "$BRANCH_NAME"
+        else
+            echo "Erro: A branch '$BRANCH_NAME' não existe remotamente."
+            exit 1
+        fi
+
+        # Substituir :latest pela nova tag
+        find /tmp/deploy -type f -name 'Dockerfile' -exec sed -i "s|:latest|:${GITHUB_COMMIT}|g" {} +
+
+        TARGET_DIR="/home/ubuntu/log-os/.infra/homol"
+
+        if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Branch é 'main', copiando para .infra/prod"
+          TARGET_DIR="/home/ubuntu/log-os/.infra/prod"
+
+          mkdir -p "$TARGET_DIR/php"
+          mkdir -p "$TARGET_DIR/supervisor"
+
+          mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
+          mv /tmp/deploy/php/default.conf "$TARGET_DIR/php/default.conf"
+          mv /tmp/deploy/php/docker-compose.yml "$TARGET_DIR/php/docker-compose.yml"
+
+          mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
+          mv /tmp/deploy/supervisor/docker-compose.yml "$TARGET_DIR/supervisor/docker-compose.yml"
+          mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
+
+        else
+          echo "Branch '$BRANCH_NAME', copiando para .infra/homol"
+
+          mkdir -p "$TARGET_DIR/nginx"
+          mkdir -p "$TARGET_DIR/php"
+          mkdir -p "$TARGET_DIR/supervisor"
+
+          mv /tmp/deploy/docker-compose.yml "$TARGET_DIR/docker-compose.yml"
+          mv /tmp/deploy/nginx/default.conf "$TARGET_DIR/nginx/default.conf"
+          mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
+          mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
+          mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
+        fi
+
+  - name: Subindo nova tag
+    uses: appleboy/ssh-action@master
+    with:
+      username: ${{ inputs.SSH_USER }}
+      key_path: ssh_key.pem
+      host: ${{ env.EC2_IPS_COMMA }}
+      script: |
+        set -e
+
+        echo "Definindo utilitário para verificar containers..."
+        container_exists() {
+          local name="$1"
+          echo "Procurando container com nome exato: $name"
+          docker ps --format '{{.Names}}' | grep -xq "$name"
+        }
+
+        ENV_PATH="/home/ubuntu/log-os/.env"
+        S3_ENV_PATH="s3://logcomex-environments-files/log-os/.env.homol"
+
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Branch é 'main', alterando para ambiente de produção..."
+          S3_ENV_PATH="s3://logcomex-environments-files/log-os/.env.prod"
+        fi
+
+        echo "Baixando o arquivo de ambiente do S3..."
+        if aws s3 ls "$S3_ENV_PATH" > /dev/null 2>&1; then
+          aws s3 cp "$S3_ENV_PATH" "$ENV_PATH"
+        else
+          echo "Erro: O arquivo $S3_ENV_PATH não foi encontrado no S3."
+          exit 1
+        fi
+
+        if container_exists logos-app; then
+          echo "Subindo serviços PHP..."
+          cd /home/ubuntu/log-os/.infra/prod/php
+          docker-compose up -d --force-recreate
+          echo "Aguardando containers iniciarem..."
+          sleep 5
+          echo "Copiando arquivo .env para dentro do container logos-app..."
+          docker cp "$ENV_PATH" logos-app:/var/www/.env
+        else
+          echo "Erro: O container logos-app não está rodando. Não foi possível copiar o .env."
+          exit 0
+        fi
+
+        if container_exists logos-supervisor; then
+          cd /home/ubuntu/log-os/.infra/prod/supervisor
+          docker-compose up -d --force-recreate
+          echo "Aguardando containers iniciarem..."
+          sleep 5
+          echo "Copiando arquivo .env para dentro do container logos-supervisor..."
+          docker cp "$ENV_PATH" logos-supervisor:/var/www/.env
+        else
+          echo "Erro: O container logos-supervisor não está rodando. Não foi possível copiar o .env."
+          exit 0
+        fi
+
+        echo "Processo finalizado com sucesso."
+
+  - name: Definir variável do nome do arquivo
+    shell: bash
+    run: |
+      export S3_FILE="builds/build-$(date +%Y%m%d%H%M%S).tar.gz"
+      echo "S3_FILE=$S3_FILE" >> $GITHUB_ENV
+      echo "Nome do arquivo para upload e download: $S3_FILE"
+
+  - name: Preparando build na instância primária e enviando para o S3
+    shell: bash
+    run: |
+      PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr -d ' ')
+      S3_BUCKET="log-os-publish-artifacts"
+
+      echo "PRIMARY_HOST: $PRIMARY_HOST"
+      echo "Upload para S3: s3://$S3_BUCKET/${{ env.S3_FILE }}"
+
+      ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" \
+      "set -e && \
+      echo 'Rodando build do Node.js na instância primária ($PRIMARY_HOST)...' && \
+      docker exec logos-app npm install --silent && \
+      docker exec logos-app npm run build && \
+      docker exec logos-app tar -czf /tmp/build.tar.gz public && \
+      docker cp logos-app:/tmp/build.tar.gz /tmp/build.tar.gz && \
+      echo 'Build finalizado e copiado para a instância primária.'"
+
+      echo "Fazendo upload do build para o S3..."
+      ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" \
+      "aws s3 cp /tmp/build.tar.gz s3://$S3_BUCKET/${{ env.S3_FILE }} --acl private"
+
+      echo "Upload para S3 concluído: s3://$S3_BUCKET/${{ env.S3_FILE }}"
+
+  - name: Configurar permissões da chave SSH
+    shell: bash
+    run: chmod 600 ssh_key.pem
+
+  - name: Distribuir build para outras instâncias
+    shell: bash
+    run: |
+      PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr ',' ' ')
+      OTHER_HOSTS=$(echo "${{ env.EC2_IPS_COMMA }}" | sed "s/$PRIMARY_HOST,//" | tr ',' ' ')
+      S3_BUCKET="log-os-publish-artifacts"
+
+      if [ -z "$OTHER_HOSTS" ]; then
+        echo "Não há outras instâncias para copiar o build. Finalizando."
+        exit 0
+      fi
+
+      echo "PRIMARY_HOST: $PRIMARY_HOST"
+      echo "Outras instâncias: $OTHER_HOSTS"
+      echo "Baixando do S3: s3://$S3_BUCKET/${{ env.S3_FILE }}"
+
+      for HOST in $OTHER_HOSTS; do
+        echo "Baixando build do S3 em $HOST..."
+        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
+        "aws s3 cp s3://$S3_BUCKET/${{ env.S3_FILE }} /tmp/build.tar.gz && \
+        echo 'Arquivo baixado do S3.'"
+
+        echo "Removendo arquivos antigos antes da extração..."
+        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
+        "docker exec logos-app rm -rf /var/www/public/*"
+
+        echo "Copiando build para o contêiner logos-app em $HOST..."
+        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
+        "docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz && \
+        docker exec logos-app tar -xzf /tmp/build.tar.gz -C /var/www/public --strip-components=1 && \
+        docker exec logos-app rm /tmp/build.tar.gz && \
+        docker exec logos-app chown -R www-data:www-data /var/www/public"
+
+        echo "Build atualizado corretamente em $HOST na pasta /var/www/public!"
+      done
+
+  - name: Preparando ambiente pós new tag
+    uses: appleboy/ssh-action@master
+    with:
+      username: ${{ inputs.SSH_USER }}
+      key_path: ssh_key.pem
+      host: ${{ env.EC2_IPS_COMMA }}
+      script: |
+        set -e
+
+        echo "Definindo utilitário para verificar containers..."
+        container_exists() {
+          docker ps --format '{{.Names}}' | grep -q "^$1$"
+        }
+
+        echo "Verificando containers disponíveis..."
+
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Branch 'main' detectada. Rodando em todos os containers (se existirem)..."
+
+          if container_exists logos-app; then
+            echo "Executando comandos no logos-app..."
+            docker exec logos-app composer install --no-interaction --prefer-dist
+            docker exec logos-app php artisan config:cache
+            docker exec logos-app php artisan view:cache
+            docker exec logos-app chown www-data:www-data storage -R
+            docker exec logos-app chown www-data:www-data bootstrap/cache -R
+          else
+            echo "Container logos-app não está rodando, ignorando."
+          fi
+
+          if container_exists logos-reverb; then
+            echo "Executando composer install no logos-reverb..."
+            docker exec logos-reverb composer install --no-interaction --prefer-dist
+          else
+            echo "Container logos-reverb não está rodando, ignorando."
+          fi
+
+          if container_exists logos-supervisor; then
+            echo "Executando composer install no logos-supervisor..."
+            docker exec logos-supervisor composer install --no-interaction --prefer-dist
+          else
+            echo "Container logos-supervisor não está rodando, ignorando."
+          fi
+
+        else
+          echo "Branch não é main, rodando apenas no logos-app (se existir)..."
+
+          if container_exists logos-app; then
+            echo "Executando comandos no logos-app..."
+            docker exec logos-app composer install --no-interaction --prefer-dist
+            docker exec logos-app php artisan config:cache
+            docker exec logos-app php artisan view:cache
+            docker exec logos-app chown www-data:www-data storage -R
+            docker exec logos-app chown www-data:www-data bootstrap/cache -R
+          else
+            echo "Container logos-app não está rodando, ignorando."
+          fi
+        fi
+
+        echo "Processo concluído com sucesso."
+
+  - name: Rebuild supervisor
+    uses: appleboy/ssh-action@master
+    with:
+      username: ${{ inputs.SSH_USER }}
+      key_path: ssh_key.pem
+      host: ${{ env.EC2_IPS_COMMA }}
+      script: |
+        set -e
+
+        # Determina o caminho com base na branch
+        if [ "${GITHUB_REF_NAME}" = "main" ]; then
+          COMPOSE_DIR="log-os/.infra/prod/supervisor"
+          RUN_COMPOSER=true
+        else
+          COMPOSE_DIR="log-os/.infra/homol/supervisor"
+          RUN_COMPOSER=false
+        fi
+
+        cd $COMPOSE_DIR
+
+        if docker ps --format '{{.Names}}' | grep -q '^logos-supervisor$'; then
+          echo "Container logos-supervisor encontrado."
+
+          if [ "$RUN_COMPOSER" = true ]; then
+            echo "Executando composer install..."
+            docker exec logos-supervisor composer install --no-interaction --prefer-dist --optimize-autoloader
+          else
+            echo "Branch diferente de main. Pulando composer install."
+          fi
+
+          echo "Recriando container..."
+          docker-compose up -d --force-recreate
+        else
+          echo "Container logos-supervisor não encontrado. Nada será feito."
+        fi
+
+  - name: Encerrando a VPN
+    if: always() && inputs.OVPN_CONFIG_FILE != ''
+    shell: bash
+    run: |
+      echo "Desconectando VPN..."
+      sudo killall openvpn
+      sleep 5
+
+  - name: Criar PR para main se a branch for RC
+    if: startsWith(github.ref, 'refs/heads/rc/')
+    id: create-pr
+    shell: bash
+    run: |
+      CURRENT_BRANCH=$(echo "${GITHUB_REF#refs/heads/}")
+      echo "Branch atual: $CURRENT_BRANCH"
+
+      PR_TITLE="[RC] branch $CURRENT_BRANCH to Main"
+      PR_BODY="Pull Request RC to Main"
+
+      echo "Verificando se a PR já existe..."
+
+      EXISTING_PR=$(gh pr list --base main --head "$CURRENT_BRANCH" --json number --jq '.[0].number')
+
+      if [[ -n "$EXISTING_PR" ]]; then
+        echo "Pull Request já existe: #$EXISTING_PR"
+        exit 0
+      fi
+
+      echo "Criando PR: $PR_TITLE"
+      gh pr create --base="main" --head="$CURRENT_BRANCH" --title="$PR_TITLE" --body="$PR_BODY"
+    env:
+      GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
