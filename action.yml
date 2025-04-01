@@ -506,30 +506,28 @@ runs:
         echo "Verificando containers antes de subir serviços:"
         docker ps --format ' - {{.Names}}'
 
-        echo "Subindo serviços PHP..."
-        cd /home/ubuntu/log-os/.infra/prod/php
-        docker-compose up -d --force-recreate
-        echo "Aguardando containers iniciarem..."
-        sleep 5
-
         if container_exists logos-app; then
-          echo "Copiando arquivo .env para dentro do container logos-app..."
+          echo "Subindo serviços logos-app..."
+          cd /home/ubuntu/log-os/.infra/prod/php
+          docker-compose up -d --force-recreate
+          echo "Aguardando container logos-app iniciar..."
+          sleep 5
+          echo "Copiando .env para o container logos-app..."
           docker cp "$ENV_PATH" logos-app:/var/www/.env
         else
-          echo "Container logos-app não encontrado após subir os serviços. Pulando..."
+          echo "Container logos-app não está presente nesta máquina. Pulando..."
         fi
 
-        echo "Subindo serviços Supervisor..."
-        cd /home/ubuntu/log-os/.infra/prod/supervisor
-        docker-compose up -d --force-recreate
-        echo "Aguardando containers iniciarem..."
-        sleep 5
-
         if container_exists logos-supervisor; then
-          echo "Copiando arquivo .env para dentro do container logos-supervisor..."
+          echo "Subindo serviços logos-supervisor..."
+          cd /home/ubuntu/log-os/.infra/prod/supervisor
+          docker-compose up -d --force-recreate
+          echo "Aguardando container logos-supervisor iniciar..."
+          sleep 5
+          echo "Copiando .env para o container logos-supervisor..."
           docker cp "$ENV_PATH" logos-supervisor:/var/www/.env
         else
-          echo "Container logos-supervisor não encontrado após subir os serviços. Pulando..."
+          echo "Container logos-supervisor não está presente nesta máquina. Pulando..."
         fi
 
         echo "Processo finalizado com sucesso."
