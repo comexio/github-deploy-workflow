@@ -267,38 +267,46 @@ runs:
     run: |
       set -euo pipefail
 
-      # Define a branch
       BRANCH_NAME="${GITHUB_REF##*/}"
 
-      # Determina se a branch é 'main'
       if [[ "$BRANCH_NAME" == "main" ]]; then
-        echo "Branch é 'main', copiando arquivos de .infra/prod"
+        echo "Branch é 'main', copiando estrutura de .infra/prod"
         SOURCE_DIR="log-os/.infra/prod"
+        mkdir -p /tmp/deploy/php/reverb
+        mkdir -p /tmp/deploy/supervisor
+
+        cp "$SOURCE_DIR/php/Dockerfile" /tmp/deploy/php/
+        cp "$SOURCE_DIR/php/default.conf" /tmp/deploy/php/
+        cp "$SOURCE_DIR/php/docker-compose.yml" /tmp/deploy/php/
+
+        cp "$SOURCE_DIR/php/reverb/Dockerfile" /tmp/deploy/php/reverb/
+        cp "$SOURCE_DIR/php/reverb/docker-compose.yml" /tmp/deploy/php/reverb/
+        cp "$SOURCE_DIR/php/reverb/reverb.conf" /tmp/deploy/php/reverb/
+
+        cp "$SOURCE_DIR/supervisor/Dockerfile" /tmp/deploy/supervisor/
+        cp "$SOURCE_DIR/supervisor/docker-compose.yml" /tmp/deploy/supervisor/
+        cp "$SOURCE_DIR/supervisor/supervisord.conf" /tmp/deploy/supervisor/
+
       else
-        echo "Branch é '$BRANCH_NAME', copiando arquivos de .infra/homol"
+        echo "Branch '$BRANCH_NAME', copiando estrutura de .infra/homol"
         SOURCE_DIR="log-os/.infra/homol"
+        mkdir -p /tmp/deploy/nginx
+        mkdir -p /tmp/deploy/php
+        mkdir -p /tmp/deploy/reverb
+        mkdir -p /tmp/deploy/supervisor
+
+        cp "$SOURCE_DIR/nginx/default.conf" /tmp/deploy/nginx/
+
+        cp "$SOURCE_DIR/php/Dockerfile" /tmp/deploy/php/
+
+        cp "$SOURCE_DIR/reverb/Dockerfile" /tmp/deploy/reverb/
+        cp "$SOURCE_DIR/reverb/reverb.conf" /tmp/deploy/reverb/
+
+        cp "$SOURCE_DIR/supervisor/Dockerfile" /tmp/deploy/supervisor/
+        cp "$SOURCE_DIR/supervisor/supervisord.conf" /tmp/deploy/supervisor/
+        cp "$SOURCE_DIR/supervisor/docker-compose.yml" /tmp/deploy/supervisor/
       fi
 
-      # Cria diretórios
-      mkdir -p /tmp/deploy/php/reverb
-      mkdir -p /tmp/deploy/supervisor
-
-      # Copia PHP
-      cp "$SOURCE_DIR/php/Dockerfile" /tmp/deploy/php/
-      cp "$SOURCE_DIR/php/default.conf" /tmp/deploy/php/
-      cp "$SOURCE_DIR/php/docker-compose.yml" /tmp/deploy/php/
-
-      # Copia reverb dentro do php
-      cp "$SOURCE_DIR/php/reverb/Dockerfile" /tmp/deploy/php/reverb/
-      cp "$SOURCE_DIR/php/reverb/docker-compose.yml" /tmp/deploy/php/reverb/
-      cp "$SOURCE_DIR/php/reverb/reverb.conf" /tmp/deploy/php/reverb/
-
-      # Copia supervisor
-      cp "$SOURCE_DIR/supervisor/Dockerfile" /tmp/deploy/supervisor/
-      cp "$SOURCE_DIR/supervisor/docker-compose.yml" /tmp/deploy/supervisor/
-      cp "$SOURCE_DIR/supervisor/supervisord.conf" /tmp/deploy/supervisor/
-
-      # Gera artefato
       tar -czf /tmp/deploy.tar.gz -C /tmp/ deploy/
     shell: bash
 
@@ -456,35 +464,50 @@ runs:
             exit 1
         fi
 
-        # Substituir :latest pela nova tag nos Dockerfiles
+        # Substituir :latest pela nova tag
         find /tmp/deploy -type f -name 'Dockerfile' -exec sed -i "s|:latest|:${GITHUB_COMMIT}|g" {} +
 
-        # Determinar destino final
         BRANCH_NAME="${GITHUB_REF##*/}"
         TARGET_DIR="/home/ubuntu/log-os/.infra/homol"
+
         if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
-          echo "Branch é 'main', alterando destino para .infra/prod..."
+          echo "Branch é 'main', copiando para .infra/prod"
           TARGET_DIR="/home/ubuntu/log-os/.infra/prod"
+
+          mkdir -p "$TARGET_DIR/php/reverb"
+          mkdir -p "$TARGET_DIR/supervisor"
+
+          mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
+          mv /tmp/deploy/php/default.conf "$TARGET_DIR/php/default.conf"
+          mv /tmp/deploy/php/docker-compose.yml "$TARGET_DIR/php/docker-compose.yml"
+
+          mv /tmp/deploy/php/reverb/Dockerfile "$TARGET_DIR/php/reverb/Dockerfile"
+          mv /tmp/deploy/php/reverb/docker-compose.yml "$TARGET_DIR/php/reverb/docker-compose.yml"
+          mv /tmp/deploy/php/reverb/reverb.conf "$TARGET_DIR/php/reverb/reverb.conf"
+
+          mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
+          mv /tmp/deploy/supervisor/docker-compose.yml "$TARGET_DIR/supervisor/docker-compose.yml"
+          mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
+
+        else
+          echo "Branch '$BRANCH_NAME', copiando para .infra/homol"
+
+          mkdir -p "$TARGET_DIR/nginx"
+          mkdir -p "$TARGET_DIR/php"
+          mkdir -p "$TARGET_DIR/reverb"
+          mkdir -p "$TARGET_DIR/supervisor"
+
+          mv /tmp/deploy/nginx/default.conf "$TARGET_DIR/nginx/default.conf"
+
+          mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
+
+          mv /tmp/deploy/reverb/Dockerfile "$TARGET_DIR/reverb/Dockerfile"
+          mv /tmp/deploy/reverb/reverb.conf "$TARGET_DIR/reverb/reverb.conf"
+
+          mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
+          mv /tmp/deploy/supervisor/docker-compose.yml "$TARGET_DIR/supervisor/docker-compose.yml"
+          mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
         fi
-
-        # Criar pastas no destino
-        mkdir -p "$TARGET_DIR/php/reverb"
-        mkdir -p "$TARGET_DIR/supervisor"
-
-        # Mover arquivos de php
-        mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
-        mv /tmp/deploy/php/default.conf "$TARGET_DIR/php/default.conf"
-        mv /tmp/deploy/php/docker-compose.yml "$TARGET_DIR/php/docker-compose.yml"
-
-        # Mover arquivos de reverb
-        mv /tmp/deploy/php/reverb/Dockerfile "$TARGET_DIR/php/reverb/Dockerfile"
-        mv /tmp/deploy/php/reverb/docker-compose.yml "$TARGET_DIR/php/reverb/docker-compose.yml"
-        mv /tmp/deploy/php/reverb/reverb.conf "$TARGET_DIR/php/reverb/reverb.conf"
-
-        # Mover arquivos de supervisor
-        mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
-        mv /tmp/deploy/supervisor/docker-compose.yml "$TARGET_DIR/supervisor/docker-compose.yml"
-        mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
 
   - name: Subindo nova tag
     uses: appleboy/ssh-action@master
