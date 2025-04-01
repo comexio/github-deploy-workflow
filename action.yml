@@ -574,12 +574,12 @@ runs:
 
         if [ "${GITHUB_REF_NAME}" = "main" ]; then
           echo "Branch 'main' detectada. Rodando em todos os containers..."
-          docker exec logos-app composer install --no-interaction --prefer-dist --optimize-autoloader
-          docker exec logos-reverb composer install --no-interaction --prefer-dist --optimize-autoloader
-          docker exec logos-supervisor composer install --no-interaction --prefer-dist --optimize-autoloader
+          docker exec logos-app composer install --no-interaction --prefer-dist
+          docker exec logos-reverb composer install --no-interaction --prefer-dist
+          docker exec logos-supervisor composer install --no-interaction --prefer-dist
         else
           echo "Branch '${GITHUB_REF_NAME}' detectada. Rodando apenas no logos-app..."
-          docker exec logos-app composer install --no-interaction --prefer-dist --optimize-autoloader
+          docker exec logos-app composer install --no-interaction --prefer-dist
         fi
 
         docker exec logos-app php artisan config:cache
@@ -600,17 +600,25 @@ runs:
         # Determina o caminho com base na branch
         if [ "${GITHUB_REF_NAME}" = "main" ]; then
           COMPOSE_DIR="log-os/.infra/prod/supervisor"
+          RUN_COMPOSER=true
         else
           COMPOSE_DIR="log-os/.infra/homol/supervisor"
+          RUN_COMPOSER=false
         fi
 
         cd $COMPOSE_DIR
 
         if docker ps --format '{{.Names}}' | grep -q '^logos-supervisor$'; then
-          echo "Container logos-supervisor encontrado. Executando composer install e recriando container..."
+          echo "Container logos-supervisor encontrado."
 
-          docker exec logos-supervisor composer install --no-interaction --prefer-dist --optimize-autoloader
+          if [ "$RUN_COMPOSER" = true ]; then
+            echo "Executando composer install..."
+            docker exec logos-supervisor composer install --no-interaction --prefer-dist --optimize-autoloader
+          else
+            echo "Branch diferente de main. Pulando composer install."
+          fi
 
+          echo "Recriando container..."
           docker-compose up -d --force-recreate
         else
           echo "Container logos-supervisor não encontrado. Nada será feito."
