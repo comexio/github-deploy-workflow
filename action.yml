@@ -132,10 +132,10 @@ runs:
       # Se a nova versão for maior ou igual à latest, atualiza a tag latest
       if version_greater_or_equal "${TAG}" "${CURRENT_LATEST}"; then
         echo "A versão ${TAG} é mais recente que ${CURRENT_LATEST}. Atualizando latest..."
-        #gh release edit "${TAG}" --prerelease=false --latest
+        gh release edit "${TAG}" --prerelease=false --latest
       else
         echo "A versão ${TAG} é mais antiga que ${CURRENT_LATEST}. Apenas removendo pré-release."
-        #gh release edit "${TAG}" --prerelease=false
+        gh release edit "${TAG}" --prerelease=false
       fi
 
       # Define a variável TAG no ambiente para os próximos steps
@@ -184,67 +184,67 @@ runs:
       EOF
     shell: bash
 
-  # - name: Autenticando no ECR
-  #   if: ${{ inputs.ECR_REGISTRY != '' }}
-  #   uses: docker/login-action@v3
-  #   with:
-  #     registry: ${{ inputs.ECR_REGISTRY }}
+  - name: Autenticando no ECR
+    if: ${{ inputs.ECR_REGISTRY != '' }}
+    uses: docker/login-action@v3
+    with:
+      registry: ${{ inputs.ECR_REGISTRY }}
 
-  # - name: Gerando Tags e Labels para usar na imagem
-  #   if: ${{ inputs.DOCKERFILE_PATH != '' }}
-  #   id: meta
-  #   uses: docker/metadata-action@v4
-  #   with:
-  #     images: ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}
-  #     flavor: latest=true
-  #     tags: |
-  #       type=raw,value=${{ env.TAG }}
-  #       type=sha,format=long,prefix=
-  #     labels: |
-  #       org.opencontainers.image.version=${{ env.TAG }}
+  - name: Gerando Tags e Labels para usar na imagem
+    if: ${{ inputs.DOCKERFILE_PATH != '' }}
+    id: meta
+    uses: docker/metadata-action@v4
+    with:
+      images: ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}
+      flavor: latest=true
+      tags: |
+        type=raw,value=${{ env.TAG }}
+        type=sha,format=long,prefix=
+      labels: |
+        org.opencontainers.image.version=${{ env.TAG }}
 
-  # - name: Build e Push da Imagem Docker
-  #   if: ${{ inputs.DOCKERFILE_PATH != '' }}
-  #   uses: docker/build-push-action@v3
-  #   with:
-  #     context: .
-  #     file: ${{ inputs.DOCKERFILE_PATH }}
-  #     tags: |
-  #       ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
-  #       ${{ steps.meta.outputs.tags }}
-  #     labels: ${{ steps.meta.outputs.labels }}
-  #     push: true
-  #     no-cache: true
-  #     build-args: |
-  #       IMAGE=${{ inputs.BASE_IMAGE }}
+  - name: Build e Push da Imagem Docker
+    if: ${{ inputs.DOCKERFILE_PATH != '' }}
+    uses: docker/build-push-action@v3
+    with:
+      context: .
+      file: ${{ inputs.DOCKERFILE_PATH }}
+      tags: |
+        ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
+        ${{ steps.meta.outputs.tags }}
+      labels: ${{ steps.meta.outputs.labels }}
+      push: true
+      no-cache: true
+      build-args: |
+        IMAGE=${{ inputs.BASE_IMAGE }}
 
-  # - name: Gerando Tags e Labels para usar na imagem Supervisor
-  #   if: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH != '' }}
-  #   id: meta_supervisor
-  #   uses: docker/metadata-action@v4
-  #   with:
-  #     images: ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}
-  #     flavor: latest=true
-  #     tags: |
-  #       type=raw,value=${{ env.TAG }}
-  #       type=sha,format=long,prefix=
-  #     labels: |
-  #       org.opencontainers.image.version=${{ env.TAG }}
+  - name: Gerando Tags e Labels para usar na imagem Supervisor
+    if: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH != '' }}
+    id: meta_supervisor
+    uses: docker/metadata-action@v4
+    with:
+      images: ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}
+      flavor: latest=true
+      tags: |
+        type=raw,value=${{ env.TAG }}
+        type=sha,format=long,prefix=
+      labels: |
+        org.opencontainers.image.version=${{ env.TAG }}
 
-  # - name: Build e Push da Imagem Docker (logos-supervisor)
-  #   if: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH != '' }}
-  #   uses: docker/build-push-action@v3
-  #   with:
-  #     context: .
-  #     file: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH }}
-  #     tags: |
-  #       ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}:${{ env.TAG }}
-  #       ${{ steps.meta_supervisor.outputs.tags }}
-  #     labels: ${{ steps.meta_supervisor.outputs.labels }}
-  #     push: true
-  #     no-cache: true
-  #     build-args: |
-  #       IMAGE=${{ inputs.SUPERVISOR_BASE_IMAGE }}
+  - name: Build e Push da Imagem Docker (logos-supervisor)
+    if: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH != '' }}
+    uses: docker/build-push-action@v3
+    with:
+      context: .
+      file: ${{ inputs.SUPERVISOR_DOCKERFILE_PATH }}
+      tags: |
+        ${{ inputs.ECR_REGISTRY }}/${{ inputs.SUPERVISOR_IMAGE_NAME }}:${{ env.TAG }}
+        ${{ steps.meta_supervisor.outputs.tags }}
+      labels: ${{ steps.meta_supervisor.outputs.labels }}
+      push: true
+      no-cache: true
+      build-args: |
+        IMAGE=${{ inputs.SUPERVISOR_BASE_IMAGE }}
 
   - name: Criando e Armazenando Artefato de Deploy
     run: |
@@ -540,37 +540,6 @@ runs:
       export S3_FILE="builds/build-$(date +%Y%m%d%H%M%S).tar.gz"
       echo "S3_FILE=$S3_FILE" >> $GITHUB_ENV
       echo "Nome do arquivo para upload e download: $S3_FILE"
-
-  # - name: Preparando build na instância primária e enviando para o S3
-  #   shell: bash
-  #   run: |
-  #     PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr -d ' ')
-  #     S3_BUCKET="log-os-publish-artifacts"
-
-  #     echo "PRIMARY_HOST: $PRIMARY_HOST"
-  #     echo "Upload para S3: s3://$S3_BUCKET/${{ env.S3_FILE }}"
-
-  #     ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" \
-  #     "set -e && \
-  #     echo 'Rodando build do Node.js na instância primária ($PRIMARY_HOST)...' && \
-  #     if docker ps --format '{{.Names}}' | grep -xq "logos-app"; then
-  #       docker exec logos-app npm install --silent
-  #       docker exec logos-app npm run build
-  #       docker exec logos-app tar -czf /tmp/build.tar.gz public
-  #       docker cp logos-app:/tmp/build.tar.gz /tmp/build.tar.gz
-  #       echo 'Build finalizado e copiado para a instância primária.'
-  #     else
-  #       echo "Container logos-app não está rodando na instância primária. Abortando build."
-  #       exit 1
-  #     fi
-
-  #     echo 'Build finalizado e copiado para a instância primária.'"
-
-  #     echo "Fazendo upload do build para o S3..."
-  #     ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" \
-  #     "aws s3 cp /tmp/build.tar.gz s3://$S3_BUCKET/${{ env.S3_FILE }} --acl private"
-
-  #     echo "Upload para S3 concluído: s3://$S3_BUCKET/${{ env.S3_FILE }}"
 
   - name: Preparando build na instância primária e enviando para o S3
     shell: bash
