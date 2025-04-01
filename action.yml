@@ -272,16 +272,12 @@ runs:
       if [[ "$BRANCH_NAME" == "main" ]]; then
         echo "Branch é 'main', copiando estrutura de .infra/prod"
         SOURCE_DIR=".infra/prod"
-        mkdir -p /tmp/deploy/php/reverb
+        mkdir -p /tmp/deploy/php
         mkdir -p /tmp/deploy/supervisor
 
         cp "$SOURCE_DIR/php/Dockerfile" /tmp/deploy/php/
         cp "$SOURCE_DIR/php/default.conf" /tmp/deploy/php/
         cp "$SOURCE_DIR/php/docker-compose.yml" /tmp/deploy/php/
-
-        cp "$SOURCE_DIR/php/reverb/Dockerfile" /tmp/deploy/php/reverb/
-        cp "$SOURCE_DIR/php/reverb/docker-compose.yml" /tmp/deploy/php/reverb/
-        cp "$SOURCE_DIR/php/reverb/reverb.conf" /tmp/deploy/php/reverb/
 
         cp "$SOURCE_DIR/supervisor/Dockerfile" /tmp/deploy/supervisor/
         cp "$SOURCE_DIR/supervisor/docker-compose.yml" /tmp/deploy/supervisor/
@@ -292,16 +288,10 @@ runs:
         SOURCE_DIR=".infra/homol"
         mkdir -p /tmp/deploy/nginx
         mkdir -p /tmp/deploy/php
-        mkdir -p /tmp/deploy/reverb
         mkdir -p /tmp/deploy/supervisor
 
         cp "$SOURCE_DIR/nginx/default.conf" /tmp/deploy/nginx/
-
         cp "$SOURCE_DIR/php/Dockerfile" /tmp/deploy/php/
-
-        cp "$SOURCE_DIR/reverb/Dockerfile" /tmp/deploy/reverb/
-        cp "$SOURCE_DIR/reverb/reverb.conf" /tmp/deploy/reverb/
-
         cp "$SOURCE_DIR/supervisor/Dockerfile" /tmp/deploy/supervisor/
         cp "$SOURCE_DIR/supervisor/supervisord.conf" /tmp/deploy/supervisor/
         cp "$SOURCE_DIR/supervisor/docker-compose.yml" /tmp/deploy/supervisor/
@@ -474,16 +464,12 @@ runs:
           echo "Branch é 'main', copiando para .infra/prod"
           TARGET_DIR="/home/ubuntu/log-os/.infra/prod"
 
-          mkdir -p "$TARGET_DIR/php/reverb"
+          mkdir -p "$TARGET_DIR/php"
           mkdir -p "$TARGET_DIR/supervisor"
 
           mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
           mv /tmp/deploy/php/default.conf "$TARGET_DIR/php/default.conf"
           mv /tmp/deploy/php/docker-compose.yml "$TARGET_DIR/php/docker-compose.yml"
-
-          mv /tmp/deploy/php/reverb/Dockerfile "$TARGET_DIR/php/reverb/Dockerfile"
-          mv /tmp/deploy/php/reverb/docker-compose.yml "$TARGET_DIR/php/reverb/docker-compose.yml"
-          mv /tmp/deploy/php/reverb/reverb.conf "$TARGET_DIR/php/reverb/reverb.conf"
 
           mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
           mv /tmp/deploy/supervisor/docker-compose.yml "$TARGET_DIR/supervisor/docker-compose.yml"
