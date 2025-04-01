@@ -305,25 +305,26 @@ runs:
 
       echo "Dados das instâncias encontradas: $INSTANCE_INFO"
 
-      get_ip_by_name() {
+      get_ips_by_name() {
         local name="$1"
         echo "$INSTANCE_INFO" | jq -r --arg NAME "$name" '
           .[] | select(.Tags[]?.Key == "Name" and .Tags[]?.Value == $NAME) | .PublicIpAddress
         '
       }
 
-      if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
-        IP_APP=$(get_ip_by_name "ec2-prd-log-os-app")
-        IP_SUPERVISOR=$(get_ip_by_name "ec2-prd-log-os-supervisor")
-        echo "IP da ec2-prd-log-os-app: $IP_APP"
-        echo "IP da ec2-prd-log-os-supervisor: $IP_SUPERVISOR"
-        echo "EC2_APP_IP=$IP_APP" >> $GITHUB_ENV
-        echo "EC2_SUPERVISOR_IP=$IP_SUPERVISOR" >> $GITHUB_ENV
-      else
-        IP_GENERAL=$(get_ip_by_name "ec2-hml-log-os-general")
-        echo "IP da ec2-hml-log-os-general: $IP_GENERAL"
-        echo "EC2_GENERAL_IP=$IP_GENERAL" >> $GITHUB_ENV
+      IP_APP=$(get_ips_by_name "ec2-prd-log-os-app" | paste -sd "," -)
+      IP_SUPERVISOR=$(get_ips_by_name "ec2-prd-log-os-supervisor" | paste -sd "," -)
+
+      if [[ -z "$IP_APP" && -z "$IP_SUPERVISOR" ]]; then
+        echo "::error::Nenhuma das instâncias esperadas foi encontrada com IP público."
+        exit 1
       fi
+
+      echo "IP da ec2-prd-log-os-app: $IP_APP"
+      echo "IP da ec2-prd-log-os-supervisor: $IP_SUPERVISOR"
+
+      echo "EC2_APP_IP=$IP_APP" >> $GITHUB_ENV
+      echo "EC2_SUPERVISOR_IP=$IP_SUPERVISOR" >> $GITHUB_ENV
   # - name: Instalando OpenVPN
   #   shell: bash
   #   run: |
