@@ -269,7 +269,8 @@ runs:
 
       # Define a branch
       BRANCH_NAME="${GITHUB_REF##*/}"
-
+      pwd
+      ls -lah
       # Determina se a branch é 'main'
       if [[ "$BRANCH_NAME" == "main" ]]; then
         echo "Branch é 'main', copiando arquivos de .infra/prod"
