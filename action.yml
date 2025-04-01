@@ -661,20 +661,21 @@ runs:
         aws s3 cp s3://$S3_BUCKET/${{ env.S3_FILE }} /tmp/build.tar.gz && \
         echo '✅ Arquivo baixado do S3.'"
 
-        echo "🧹 Removendo arquivos antigos do container logos-app em $HOST..."
-        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
-        "set -e && \
-        docker exec logos-app rm -rf /var/www/public/*"
+        echo "🔍 Verificando se logos-app está rodando em $HOST..."
+        if ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
+          "docker ps --format '{{.Names}}'" | grep -xq "logos-app"; then
 
-        echo "📦 Extraindo build para o container logos-app em $HOST..."
-        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
-        "set -e && \
-        docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz && \
-        docker exec logos-app tar -xzf /tmp/build.tar.gz -C /var/www/public --strip-components=1 && \
-        docker exec logos-app rm /tmp/build.tar.gz && \
-        docker exec logos-app chown -R www-data:www-data /var/www/public"
+          echo "📦 Extraindo build para o container logos-app em $HOST..."
+          ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
+          "docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz && \
+          docker exec logos-app tar -xzf /tmp/build.tar.gz -C /var/www/public --strip-components=1 && \
+          docker exec logos-app rm /tmp/build.tar.gz && \
+          docker exec logos-app chown -R www-data:www-data /var/www/public"
 
-        echo "✅ Build atualizado corretamente em $HOST na pasta /var/www/public!"
+          echo "✅ Build atualizado corretamente em $HOST na pasta /var/www/public!"
+        else
+          echo "⚠️ Container logos-app não está presente em $HOST. Pulando..."
+        fi
       done
 
   - name: Preparando ambiente pós new tag
