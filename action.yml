@@ -247,21 +247,21 @@ runs:
         IMAGE=${{ inputs.SUPERVISOR_BASE_IMAGE }}
   ##################  DEPLOY IMAGE # ##################
 
-  - name: Criando e Armazenando Artefato de Deploy
-    if: ${{ inputs.DEPLOY_FILES != '' }}
-    run: |
-      mkdir -p /tmp/deploy
-      set -f
+  # - name: Criando e Armazenando Artefato de Deploy
+  #   if: ${{ inputs.DEPLOY_FILES != '' }}
+  #   run: |
+  #     mkdir -p /tmp/deploy
+  #     set -f
 
-      for file in ${{ inputs.DEPLOY_FILES }}; do
-        echo "Copiando $file para /tmp/deploy/"
-        DEST_DIR="/tmp/deploy/$(dirname "$file")"
-        mkdir -p "$DEST_DIR"
-        cp "$file" "$DEST_DIR/" || { echo "Erro ao copiar $file"; exit 1; }
-      done
+  #     for file in ${{ inputs.DEPLOY_FILES }}; do
+  #       echo "Copiando $file para /tmp/deploy/"
+  #       DEST_DIR="/tmp/deploy/$(dirname "$file")"
+  #       mkdir -p "$DEST_DIR"
+  #       cp "$file" "$DEST_DIR/" || { echo "Erro ao copiar $file"; exit 1; }
+  #     done
 
-      tar -czf /tmp/deploy.tar.gz -C /tmp/ deploy/
-    shell: bash
+  #     tar -czf /tmp/deploy.tar.gz -C /tmp/ deploy/
+  #   shell: bash
 
   - name: Criando e Armazenando Artefato de Deploy
     run: |
