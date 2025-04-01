@@ -431,7 +431,8 @@ runs:
         set -e
         tar -xzf /tmp/deploy.tar.gz -C /tmp/
         export GITHUB_COMMIT=${{ env.TAG }}
-        BRANCH_NAME="rc/$GITHUB_COMMIT"
+        BRANCH_NAME="${GITHUB_REF##*/}"
+
 
         cd /home/ubuntu/log-os/
 
@@ -457,7 +458,6 @@ runs:
         # Substituir :latest pela nova tag
         find /tmp/deploy -type f -name 'Dockerfile' -exec sed -i "s|:latest|:${GITHUB_COMMIT}|g" {} +
 
-        BRANCH_NAME="${GITHUB_REF##*/}"
         TARGET_DIR="/home/ubuntu/log-os/.infra/homol"
 
         if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
