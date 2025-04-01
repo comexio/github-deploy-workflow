@@ -489,10 +489,12 @@ runs:
 
         ENV_PATH="/home/ubuntu/log-os/.env"
         S3_ENV_PATH="s3://logcomex-environments-files/log-os/.env.homol"
+        INFRA_PATH="/home/ubuntu/log-os/.infra/homol/"
 
         if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
           echo "Branch é 'main', alterando para ambiente de produção..."
           S3_ENV_PATH="s3://logcomex-environments-files/log-os/.env.prod"
+          INFRA_PATH="/home/ubuntu/log-os/.infra/prod/"
         fi
 
         echo "Baixando o arquivo de ambiente do S3..."
@@ -508,7 +510,7 @@ runs:
 
         if container_exists logos-app; then
           echo "Subindo serviços logos-app..."
-          cd /home/ubuntu/log-os/.infra/prod/php
+          cd $INFRA_PATH/php
           docker-compose up -d --force-recreate
           echo "Aguardando container logos-app iniciar..."
           sleep 5
@@ -520,7 +522,7 @@ runs:
 
         if container_exists logos-supervisor; then
           echo "Subindo serviços logos-supervisor..."
-          cd /home/ubuntu/log-os/.infra/prod/supervisor
+          cd $INFRA_PATH/supervisor
           docker-compose up -d --force-recreate
           echo "Aguardando container logos-supervisor iniciar..."
           sleep 5
