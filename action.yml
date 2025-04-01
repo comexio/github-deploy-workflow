@@ -628,11 +628,9 @@ runs:
           docker ps --format '{{.Names}}' | grep -q "^$1$"
         }
 
-        BRANCH_NAME="${GITHUB_REF##*/}"
-
         echo "Verificando containers disponíveis..."
 
-        if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
           echo "Branch 'main' detectada. Rodando em todos os containers (se existirem)..."
 
           if container_exists logos-app; then
