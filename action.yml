@@ -269,15 +269,14 @@ runs:
 
       # Define a branch
       BRANCH_NAME="${GITHUB_REF##*/}"
-      pwd
-      ls -lah
+
       # Determina se a branch é 'main'
       if [[ "$BRANCH_NAME" == "main" ]]; then
         echo "Branch é 'main', copiando arquivos de .infra/prod"
-        SOURCE_DIR="log-os/.infra/prod"
+        SOURCE_DIR=".infra/prod"
       else
         echo "Branch é '$BRANCH_NAME', copiando arquivos de .infra/homol"
-        SOURCE_DIR="log-os/.infra/homol"
+        SOURCE_DIR=".infra/homol"
       fi
 
       # Cria diretório temporário
