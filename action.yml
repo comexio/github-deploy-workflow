@@ -626,13 +626,14 @@ runs:
         echo "Ajustando permissões e rodando otimizações..."
         docker exec logos-app chown www-data:www-data bootstrap/cache -R
 
-        if [ "${GITHUB_REF_NAME}" = "main" ]; then
+        BRANCH_NAME="${GITHUB_REF##*/}"
+        if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
           echo "Branch 'main' detectada. Rodando em todos os containers..."
           docker exec logos-app composer install --no-interaction --prefer-dist
           docker exec logos-reverb composer install --no-interaction --prefer-dist
           docker exec logos-supervisor composer install --no-interaction --prefer-dist
         else
-          echo "Branch '${GITHUB_REF_NAME}' detectada. Rodando apenas no logos-app..."
+          echo "Branch não é main, rodando apenas no logos-app..."
           docker exec logos-app composer install --no-interaction --prefer-dist
         fi
 
