@@ -247,19 +247,56 @@ runs:
         IMAGE=${{ inputs.SUPERVISOR_BASE_IMAGE }}
   # ##################  DEPLOY IMAGE # ##################
 
+  # - name: Criando e Armazenando Artefato de Deploy
+  #   if: ${{ inputs.DEPLOY_FILES != '' }}
+  #   run: |
+  #     mkdir -p /tmp/deploy
+  #     set -f
+
+  #     for file in ${{ inputs.DEPLOY_FILES }}; do
+  #       echo "Copiando $file para /tmp/deploy/"
+  #       DEST_DIR="/tmp/deploy/$(dirname "$file")"
+  #       mkdir -p "$DEST_DIR"
+  #       cp "$file" "$DEST_DIR/" || { echo "Erro ao copiar $file"; exit 1; }
+  #     done
+
+  #     tar -czf /tmp/deploy.tar.gz -C /tmp/ deploy/
+  #   shell: bash
+
   - name: Criando e Armazenando Artefato de Deploy
-    if: ${{ inputs.DEPLOY_FILES != '' }}
     run: |
-      mkdir -p /tmp/deploy
-      set -f
+      set -euo pipefail
 
-      for file in ${{ inputs.DEPLOY_FILES }}; do
-        echo "Copiando $file para /tmp/deploy/"
-        DEST_DIR="/tmp/deploy/$(dirname "$file")"
-        mkdir -p "$DEST_DIR"
-        cp "$file" "$DEST_DIR/" || { echo "Erro ao copiar $file"; exit 1; }
-      done
+      # Define a branch
+      BRANCH_NAME="${GITHUB_REF##*/}"
 
+      # Determina se a branch é 'main'
+      if [[ "$BRANCH_NAME" == "main" ]]; then
+        echo "Branch é 'main', copiando arquivos de .infra/prod"
+        SOURCE_DIR="log-os/.infra/prod"
+      else
+        echo "Branch é '$BRANCH_NAME', copiando arquivos de .infra/homol"
+        SOURCE_DIR="log-os/.infra/homol"
+      fi
+
+      # Cria diretório temporário
+      mkdir -p /tmp/deploy/php
+      mkdir -p /tmp/deploy/supervisor
+      mkdir -p /tmp/deploy/reverb
+
+      # Copia os arquivos para o diretório temporário
+      cp "$SOURCE_DIR/php/Dockerfile" /tmp/deploy/php/
+      cp "$SOURCE_DIR/php/default.conf" /tmp/deploy/php/
+
+      cp "$SOURCE_DIR/supervisor/Dockerfile" /tmp/deploy/supervisor/
+      cp "$SOURCE_DIR/supervisor/docker-compose.yml" /tmp/deploy/supervisor/
+      cp "$SOURCE_DIR/supervisor/supervisord.conf" /tmp/deploy/supervisor/
+
+      cp -r "$SOURCE_DIR/reverb" /tmp/deploy/
+
+      cp "$SOURCE_DIR/docker-compose.yml" /tmp/deploy/
+
+      # Gera o artefato compactado
       tar -czf /tmp/deploy.tar.gz -C /tmp/ deploy/
     shell: bash
 
