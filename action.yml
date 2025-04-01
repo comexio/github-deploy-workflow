@@ -617,37 +617,64 @@ runs:
   - name: Distribuir build para outras instâncias
     shell: bash
     run: |
-      PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr ',' ' ')
-      OTHER_HOSTS=$(echo "${{ env.EC2_IPS_COMMA }}" | sed "s/$PRIMARY_HOST,//" | tr ',' ' ')
       S3_BUCKET="log-os-publish-artifacts"
+      HOSTS=($(echo "${{ env.EC2_IPS_COMMA }}" | tr ',' ' '))
 
-      if [ -z "$OTHER_HOSTS" ]; then
+      echo "🔎 Buscando novamente a instância com container logos-app para definir PRIMARY_HOST..."
+      PRIMARY_HOST=""
+      OTHER_HOSTS=()
+
+      for HOST in "${HOSTS[@]}"; do
+        echo "➡️ Verificando $HOST..."
+
+        if ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" "docker ps --format '{{.Names}}'" | grep -xq "logos-app"; then
+          echo "✅ Container logos-app encontrado em $HOST."
+          PRIMARY_HOST=$HOST
+          break
+        fi
+      done
+
+      if [ -z "$PRIMARY_HOST" ]; then
+        echo "::error::❌ Nenhuma instância com container logos-app foi encontrada para distribuir o build."
+        exit 1
+      fi
+
+      for HOST in "${HOSTS[@]}"; do
+        if [ "$HOST" != "$PRIMARY_HOST" ]; then
+          OTHER_HOSTS+=("$HOST")
+        fi
+      done
+
+      if [ ${#OTHER_HOSTS[@]} -eq 0 ]; then
         echo "Não há outras instâncias para copiar o build. Finalizando."
         exit 0
       fi
 
       echo "PRIMARY_HOST: $PRIMARY_HOST"
-      echo "Outras instâncias: $OTHER_HOSTS"
+      echo "Outras instâncias: ${OTHER_HOSTS[*]}"
       echo "Baixando do S3: s3://$S3_BUCKET/${{ env.S3_FILE }}"
 
-      for HOST in $OTHER_HOSTS; do
-        echo "Baixando build do S3 em $HOST..."
+      for HOST in "${OTHER_HOSTS[@]}"; do
+        echo "🔄 Baixando build do S3 em $HOST..."
         ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
-        "aws s3 cp s3://$S3_BUCKET/${{ env.S3_FILE }} /tmp/build.tar.gz && \
-        echo 'Arquivo baixado do S3.'"
+        "set -e && \
+        aws s3 cp s3://$S3_BUCKET/${{ env.S3_FILE }} /tmp/build.tar.gz && \
+        echo '✅ Arquivo baixado do S3.'"
 
-        echo "Removendo arquivos antigos antes da extração..."
+        echo "🧹 Removendo arquivos antigos do container logos-app em $HOST..."
         ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
-        "docker exec logos-app rm -rf /var/www/public/*"
+        "set -e && \
+        docker exec logos-app rm -rf /var/www/public/*"
 
-        echo "Copiando build para o contêiner logos-app em $HOST..."
+        echo "📦 Extraindo build para o container logos-app em $HOST..."
         ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
-        "docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz && \
+        "set -e && \
+        docker cp /tmp/build.tar.gz logos-app:/tmp/build.tar.gz && \
         docker exec logos-app tar -xzf /tmp/build.tar.gz -C /var/www/public --strip-components=1 && \
         docker exec logos-app rm /tmp/build.tar.gz && \
         docker exec logos-app chown -R www-data:www-data /var/www/public"
 
-        echo "Build atualizado corretamente em $HOST na pasta /var/www/public!"
+        echo "✅ Build atualizado corretamente em $HOST na pasta /var/www/public!"
       done
 
   - name: Preparando ambiente pós new tag
