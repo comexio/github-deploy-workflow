@@ -422,18 +422,30 @@ runs:
 
         # Determinar o diretório correto
         TARGET_DIR="/home/ubuntu/log-os/.infra/homol"
+        SOURCE_DIR="/tmp/deploy/.infra/homol"
+
         if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
-          echo "Branch é 'main', alterando destino para infra/prod..."
+          echo "Branch é 'main', alterando destino para .infra/prod..."
           TARGET_DIR="/home/ubuntu/log-os/.infra/prod"
+          SOURCE_DIR="/tmp/deploy/.infra/prod"
         fi
 
+        # Criar as pastas necessárias
         mkdir -p "$TARGET_DIR/php"
         mkdir -p "$TARGET_DIR/supervisor"
+        mkdir -p "$TARGET_DIR/reverb"
 
-        # Mover os Dockerfiles e compose corrigido
-        mv /tmp/deploy/.infra/homol/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
-        mv /tmp/deploy/.infra/homol/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
-        mv /tmp/deploy/.infra/homol/docker-compose.yml "$TARGET_DIR/docker-compose.yml"
+        # Mover arquivos e pastas para os diretórios corretos
+        mv "$SOURCE_DIR/php/Dockerfile" "$TARGET_DIR/php/Dockerfile"
+        mv "$SOURCE_DIR/php/default.conf" "$TARGET_DIR/php/default.conf"
+
+        mv "$SOURCE_DIR/supervisor/Dockerfile" "$TARGET_DIR/supervisor/Dockerfile"
+        mv "$SOURCE_DIR/supervisor/docker-compose.yml" "$TARGET_DIR/supervisor/docker-compose.yml"
+        mv "$SOURCE_DIR/supervisor/supervisord.conf" "$TARGET_DIR/supervisor/supervisord.conf"
+
+        mv "$SOURCE_DIR/reverb" "$TARGET_DIR/reverb"
+
+        mv "$SOURCE_DIR/docker-compose.yml" "$TARGET_DIR/docker-compose.yml"
 
   - name: Subindo nova tag
     uses: appleboy/ssh-action@master
