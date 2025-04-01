@@ -539,36 +539,80 @@ runs:
       echo "S3_FILE=$S3_FILE" >> $GITHUB_ENV
       echo "Nome do arquivo para upload e download: $S3_FILE"
 
+  # - name: Preparando build na instância primária e enviando para o S3
+  #   shell: bash
+  #   run: |
+  #     PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr -d ' ')
+  #     S3_BUCKET="log-os-publish-artifacts"
+
+  #     echo "PRIMARY_HOST: $PRIMARY_HOST"
+  #     echo "Upload para S3: s3://$S3_BUCKET/${{ env.S3_FILE }}"
+
+  #     ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" \
+  #     "set -e && \
+  #     echo 'Rodando build do Node.js na instância primária ($PRIMARY_HOST)...' && \
+  #     if docker ps --format '{{.Names}}' | grep -xq "logos-app"; then
+  #       docker exec logos-app npm install --silent
+  #       docker exec logos-app npm run build
+  #       docker exec logos-app tar -czf /tmp/build.tar.gz public
+  #       docker cp logos-app:/tmp/build.tar.gz /tmp/build.tar.gz
+  #       echo 'Build finalizado e copiado para a instância primária.'
+  #     else
+  #       echo "Container logos-app não está rodando na instância primária. Abortando build."
+  #       exit 1
+  #     fi
+
+  #     echo 'Build finalizado e copiado para a instância primária.'"
+
+  #     echo "Fazendo upload do build para o S3..."
+  #     ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" \
+  #     "aws s3 cp /tmp/build.tar.gz s3://$S3_BUCKET/${{ env.S3_FILE }} --acl private"
+
+  #     echo "Upload para S3 concluído: s3://$S3_BUCKET/${{ env.S3_FILE }}"
+
   - name: Preparando build na instância primária e enviando para o S3
     shell: bash
     run: |
-      PRIMARY_HOST=$(echo "${{ env.EC2_IPS_COMMA }}" | awk -F',' '{print $1}' | tr -d ' ')
       S3_BUCKET="log-os-publish-artifacts"
+      BUILD_SUCCESS=false
 
-      echo "PRIMARY_HOST: $PRIMARY_HOST"
-      echo "Upload para S3: s3://$S3_BUCKET/${{ env.S3_FILE }}"
+      echo "IPs disponíveis: ${{ env.EC2_IPS_COMMA }}"
 
-      ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" \
-      "set -e && \
-      echo 'Rodando build do Node.js na instância primária ($PRIMARY_HOST)...' && \
-      if docker ps --format '{{.Names}}' | grep -xq "logos-app"; then
-        docker exec logos-app npm install --silent
-        docker exec logos-app npm run build
-        docker exec logos-app tar -czf /tmp/build.tar.gz public
-        docker cp logos-app:/tmp/build.tar.gz /tmp/build.tar.gz
-        echo 'Build finalizado e copiado para a instância primária.'
-      else
-        echo "Container logos-app não está rodando na instância primária. Abortando build."
+      for HOST in $(echo "${{ env.EC2_IPS_COMMA }}" | tr ',' ' '); do
+        echo "🔍 Verificando container logos-app em $HOST..."
+
+        CONTAINER_EXISTS=$(ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
+          "docker ps --format '{{.Names}}'" | grep -xq "logos-app" && echo "yes" || echo "no")
+
+        if [ "$CONTAINER_EXISTS" = "yes" ]; then
+          echo "Encontrado container logos-app em $HOST. Iniciando build..."
+
+          ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
+          "set -e && \
+          echo 'Rodando build do Node.js na instância $HOST...' && \
+          docker exec logos-app npm install --silent && \
+          docker exec logos-app npm run build && \
+          docker exec logos-app tar -czf /tmp/build.tar.gz public && \
+          docker cp logos-app:/tmp/build.tar.gz /tmp/build.tar.gz && \
+          echo 'Build finalizado e copiado para a instância $HOST.'"
+
+          echo "Fazendo upload para o S3..."
+          ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
+          "set -e && \
+          aws s3 cp /tmp/build.tar.gz s3://$S3_BUCKET/${{ env.S3_FILE }} --acl private && \
+          echo 'Upload concluído com sucesso de $HOST.'"
+
+          BUILD_SUCCESS=true
+          break
+        else
+          echo "Container logos-app não encontrado em $HOST. Tentando próxima..."
+        fi
+      done
+
+      if [ "$BUILD_SUCCESS" != "true" ]; then
+        echo "::error:: Nenhuma instância com container logos-app disponível para build."
         exit 1
       fi
-
-      echo 'Build finalizado e copiado para a instância primária.'"
-
-      echo "Fazendo upload do build para o S3..."
-      ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$PRIMARY_HOST" \
-      "aws s3 cp /tmp/build.tar.gz s3://$S3_BUCKET/${{ env.S3_FILE }} --acl private"
-
-      echo "Upload para S3 concluído: s3://$S3_BUCKET/${{ env.S3_FILE }}"
 
   - name: Configurar permissões da chave SSH
     shell: bash
