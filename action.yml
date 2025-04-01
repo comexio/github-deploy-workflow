@@ -706,13 +706,6 @@ runs:
             echo "⚠️ Container logos-app não encontrado nesta máquina. Pulando..."
           fi
 
-          if docker ps --format '{{.Names}}' | grep -xq "logos-reverb"; then
-            echo "✅ Executando composer install no logos-reverb..."
-            docker exec logos-reverb composer install --no-interaction --prefer-dist
-          else
-            echo "⚠️ Container logos-reverb não encontrado nesta máquina. Pulando..."
-          fi
-
           if docker ps --format '{{.Names}}' | grep -xq "logos-supervisor"; then
             echo "✅ Executando composer install no logos-supervisor..."
             docker exec logos-supervisor composer install --no-interaction --prefer-dist
@@ -736,42 +729,6 @@ runs:
         fi
 
         echo "✅ Processo concluído com sucesso."
-
-  - name: Rebuild supervisor
-    uses: appleboy/ssh-action@master
-    with:
-      username: ${{ inputs.SSH_USER }}
-      key_path: ssh_key.pem
-      host: ${{ env.EC2_IPS_COMMA }}
-      script: |
-        set -e
-
-        # Determina o caminho com base na branch
-        if [ "${GITHUB_REF_NAME}" = "main" ]; then
-          COMPOSE_DIR="log-os/.infra/prod/supervisor"
-          RUN_COMPOSER=true
-        else
-          COMPOSE_DIR="log-os/.infra/homol/supervisor"
-          RUN_COMPOSER=false
-        fi
-
-        cd $COMPOSE_DIR
-
-        if docker ps --format '{{.Names}}' | grep -q '^logos-supervisor$'; then
-          echo "Container logos-supervisor encontrado."
-
-          if [ "$RUN_COMPOSER" = true ]; then
-            echo "Executando composer install..."
-            docker exec logos-supervisor composer install --no-interaction --prefer-dist --optimize-autoloader
-          else
-            echo "Branch diferente de main. Pulando composer install."
-          fi
-
-          echo "Recriando container..."
-          docker-compose up -d --force-recreate
-        else
-          echo "Container logos-supervisor não encontrado. Nada será feito."
-        fi
 
   - name: Encerrando a VPN
     if: always() && inputs.OVPN_CONFIG_FILE != ''
