@@ -576,16 +576,12 @@ runs:
       S3_BUCKET="log-os-publish-artifacts"
       BUILD_SUCCESS=false
 
-      echo "IPs disponíveis: ${{ env.EC2_IPS_COMMA }}"
-
+      echo "🔎 Buscando instância com container logos-app..."
       for HOST in $(echo "${{ env.EC2_IPS_COMMA }}" | tr ',' ' '); do
-        echo "🔍 Verificando container logos-app em $HOST..."
+        echo "Verificando $HOST..."
 
-        CONTAINER_EXISTS=$(ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
-          "docker ps --format '{{.Names}}'" | grep -xq "logos-app" && echo "yes" || echo "no")
-
-        if [ "$CONTAINER_EXISTS" = "yes" ]; then
-          echo "Encontrado container logos-app em $HOST. Iniciando build..."
+        if ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" "docker ps --format '{{.Names}}'" | grep -xq "logos-app"; then
+          echo "logos-app encontrado em $HOST. Iniciando build..."
 
           ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$HOST" \
           "set -e && \
