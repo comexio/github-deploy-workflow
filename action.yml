@@ -519,18 +519,12 @@ runs:
           exit 1
         fi
 
-        echo "Subindo serviços PHP..."
-        cd /home/ubuntu/log-os/.infra/prod/php
-        docker-compose up -d --force-recreate
-
-        echo "Subindo serviços Supervisor..."
-        cd /home/ubuntu/log-os/.infra/prod/supervisor
-        docker-compose up -d --force-recreate
-
-        echo "Aguardando containers iniciarem..."
-        sleep 5
-
         if container_exists logos-app; then
+          echo "Subindo serviços PHP..."
+          cd /home/ubuntu/log-os/.infra/prod/php
+          docker-compose up -d --force-recreate
+          echo "Aguardando containers iniciarem..."
+          sleep 5
           echo "Copiando arquivo .env para dentro do container logos-app..."
           docker cp "$ENV_PATH" logos-app:/var/www/.env
         else
@@ -539,17 +533,15 @@ runs:
         fi
 
         if container_exists logos-supervisor; then
+          cd /home/ubuntu/log-os/.infra/prod/supervisor
+          docker-compose up -d --force-recreate
+          echo "Aguardando containers iniciarem..."
+          sleep 5
           echo "Copiando arquivo .env para dentro do container logos-supervisor..."
           docker cp "$ENV_PATH" logos-supervisor:/var/www/.env
         else
           echo "Erro: O container logos-supervisor não está rodando. Não foi possível copiar o .env."
           exit 1
-        fi
-
-        if container_exists logos-supervisor; then
-          echo "Container logos-supervisor está rodando."
-        else
-          echo "Aviso: O container logos-supervisor não está rodando."
         fi
 
         echo "Processo finalizado com sucesso."
