@@ -623,23 +623,57 @@ runs:
       script: |
         set -e
 
-        echo "Ajustando permissões e rodando otimizações..."
-        docker exec logos-app chown www-data:www-data bootstrap/cache -R
+        echo "Definindo utilitário para verificar containers..."
+        container_exists() {
+          docker ps --format '{{.Names}}' | grep -q "^$1$"
+        }
 
         BRANCH_NAME="${GITHUB_REF##*/}"
-        if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
-          echo "Branch 'main' detectada. Rodando em todos os containers..."
-          docker exec logos-app composer install --no-interaction --prefer-dist
-          docker exec logos-reverb composer install --no-interaction --prefer-dist
-          docker exec logos-supervisor composer install --no-interaction --prefer-dist
-        else
-          echo "Branch não é main, rodando apenas no logos-app..."
-          docker exec logos-app composer install --no-interaction --prefer-dist
-        fi
 
-        docker exec logos-app php artisan config:cache
-        docker exec logos-app php artisan view:cache
-        docker exec logos-app chown www-data:www-data storage -R
+        echo "Verificando containers disponíveis..."
+
+        if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Branch 'main' detectada. Rodando em todos os containers (se existirem)..."
+
+          if container_exists logos-app; then
+            echo "Executando comandos no logos-app..."
+            docker exec logos-app composer install --no-interaction --prefer-dist
+            docker exec logos-app php artisan config:cache
+            docker exec logos-app php artisan view:cache
+            docker exec logos-app chown www-data:www-data storage -R
+            docker exec logos-app chown www-data:www-data bootstrap/cache -R
+          else
+            echo "Container logos-app não está rodando, ignorando."
+          fi
+
+          if container_exists logos-reverb; then
+            echo "Executando composer install no logos-reverb..."
+            docker exec logos-reverb composer install --no-interaction --prefer-dist
+          else
+            echo "Container logos-reverb não está rodando, ignorando."
+          fi
+
+          if container_exists logos-supervisor; then
+            echo "Executando composer install no logos-supervisor..."
+            docker exec logos-supervisor composer install --no-interaction --prefer-dist
+          else
+            echo "Container logos-supervisor não está rodando, ignorando."
+          fi
+
+        else
+          echo "Branch não é main, rodando apenas no logos-app (se existir)..."
+
+          if container_exists logos-app; then
+            echo "Executando comandos no logos-app..."
+            docker exec logos-app composer install --no-interaction --prefer-dist
+            docker exec logos-app php artisan config:cache
+            docker exec logos-app php artisan view:cache
+            docker exec logos-app chown www-data:www-data storage -R
+            docker exec logos-app chown www-data:www-data bootstrap/cache -R
+          else
+            echo "Container logos-app não está rodando, ignorando."
+          fi
+        fi
 
         echo "Processo concluído com sucesso."
 
