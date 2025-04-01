@@ -457,14 +457,11 @@ runs:
         # Substituir :latest pela nova tag
         find /tmp/deploy -type f -name 'Dockerfile' -exec sed -i "s|:latest|:${GITHUB_COMMIT}|g" {} +
 
-        # Determinar o diretório correto
+        # Determinar o diretório de destino
         TARGET_DIR="/home/ubuntu/log-os/.infra/homol"
-        SOURCE_DIR="/tmp/deploy/.infra/homol"
-
         if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
           echo "Branch é 'main', alterando destino para .infra/prod..."
           TARGET_DIR="/home/ubuntu/log-os/.infra/prod"
-          SOURCE_DIR="/tmp/deploy/.infra/prod"
         fi
 
         # Criar as pastas necessárias
@@ -472,17 +469,17 @@ runs:
         mkdir -p "$TARGET_DIR/supervisor"
         mkdir -p "$TARGET_DIR/reverb"
 
-        # Mover arquivos e pastas para os diretórios corretos
-        mv "$SOURCE_DIR/php/Dockerfile" "$TARGET_DIR/php/Dockerfile"
-        mv "$SOURCE_DIR/php/default.conf" "$TARGET_DIR/php/default.conf"
+        # Mover arquivos da /tmp/deploy para o destino final
+        mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
+        mv /tmp/deploy/php/default.conf "$TARGET_DIR/php/default.conf"
 
-        mv "$SOURCE_DIR/supervisor/Dockerfile" "$TARGET_DIR/supervisor/Dockerfile"
-        mv "$SOURCE_DIR/supervisor/docker-compose.yml" "$TARGET_DIR/supervisor/docker-compose.yml"
-        mv "$SOURCE_DIR/supervisor/supervisord.conf" "$TARGET_DIR/supervisor/supervisord.conf"
+        mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
+        mv /tmp/deploy/supervisor/docker-compose.yml "$TARGET_DIR/supervisor/docker-compose.yml"
+        mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
 
-        mv "$SOURCE_DIR/reverb" "$TARGET_DIR/reverb"
+        mv /tmp/deploy/reverb "$TARGET_DIR/reverb"
 
-        mv "$SOURCE_DIR/docker-compose.yml" "$TARGET_DIR/docker-compose.yml"
+        mv /tmp/deploy/docker-compose.yml "$TARGET_DIR/docker-compose.yml"
 
   - name: Subindo nova tag
     uses: appleboy/ssh-action@master
