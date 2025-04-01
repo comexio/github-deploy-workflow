@@ -271,7 +271,7 @@ runs:
 
       if [[ "$BRANCH_NAME" == "main" ]]; then
         echo "Branch é 'main', copiando estrutura de .infra/prod"
-        SOURCE_DIR="log-os/.infra/prod"
+        SOURCE_DIR=".infra/prod"
         mkdir -p /tmp/deploy/php/reverb
         mkdir -p /tmp/deploy/supervisor
 
@@ -289,7 +289,7 @@ runs:
 
       else
         echo "Branch '$BRANCH_NAME', copiando estrutura de .infra/homol"
-        SOURCE_DIR="log-os/.infra/homol"
+        SOURCE_DIR=".infra/homol"
         mkdir -p /tmp/deploy/nginx
         mkdir -p /tmp/deploy/php
         mkdir -p /tmp/deploy/reverb
