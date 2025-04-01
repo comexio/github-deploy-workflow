@@ -480,16 +480,10 @@ runs:
 
           mkdir -p "$TARGET_DIR/nginx"
           mkdir -p "$TARGET_DIR/php"
-          mkdir -p "$TARGET_DIR/reverb"
           mkdir -p "$TARGET_DIR/supervisor"
 
           mv /tmp/deploy/nginx/default.conf "$TARGET_DIR/nginx/default.conf"
-
           mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
-
-          mv /tmp/deploy/reverb/Dockerfile "$TARGET_DIR/reverb/Dockerfile"
-          mv /tmp/deploy/reverb/reverb.conf "$TARGET_DIR/reverb/reverb.conf"
-
           mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
           mv /tmp/deploy/supervisor/docker-compose.yml "$TARGET_DIR/supervisor/docker-compose.yml"
           mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
