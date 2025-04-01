@@ -132,10 +132,10 @@ runs:
       # Se a nova versão for maior ou igual à latest, atualiza a tag latest
       if version_greater_or_equal "${TAG}" "${CURRENT_LATEST}"; then
         echo "A versão ${TAG} é mais recente que ${CURRENT_LATEST}. Atualizando latest..."
-        gh release edit "${TAG}" --prerelease=false --latest
+        #gh release edit "${TAG}" --prerelease=false --latest
       else
         echo "A versão ${TAG} é mais antiga que ${CURRENT_LATEST}. Apenas removendo pré-release."
-        gh release edit "${TAG}" --prerelease=false
+        #gh release edit "${TAG}" --prerelease=false
       fi
 
       # Define a variável TAG no ambiente para os próximos steps
@@ -496,23 +496,19 @@ runs:
       key_path: ssh_key.pem
       host: ${{ env.EC2_IPS_COMMA }}
       script: |
-        set -e  # Encerra o script se qualquer comando falhar
+        set -e
 
         echo "Definindo utilitário para verificar containers..."
         container_exists() {
           docker ps --format '{{.Names}}' | grep -q "^$1$"
         }
 
-        # Definir diretórios padrão para ambiente HOMOL
         ENV_PATH="/home/ubuntu/log-os/.env"
         S3_ENV_PATH="s3://logcomex-environments-files/log-os/.env.homol"
-        COMPOSE_DIR="/home/ubuntu/log-os/.infra/homol"
 
-        # Se estiver na branch main, usar ambiente PROD
         if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
           echo "Branch é 'main', alterando para ambiente de produção..."
           S3_ENV_PATH="s3://logcomex-environments-files/log-os/.env.prod"
-          COMPOSE_DIR="/home/ubuntu/log-os/.infra/prod"
         fi
 
         echo "Baixando o arquivo de ambiente do S3..."
@@ -523,13 +519,18 @@ runs:
           exit 1
         fi
 
-        echo "Recriando os containers com Docker Compose..."
+        echo "Subindo serviços PHP..."
+        cd /home/ubuntu/log-os/.infra/prod/php
+        docker-compose up -d --force-recreate
+
+        echo "Subindo serviços Supervisor..."
+        cd /home/ubuntu/log-os/.infra/prod/supervisor
+        docker-compose up -d --force-recreate
+
+        echo "Aguardando containers iniciarem..."
+        sleep 5
 
         if container_exists logos-app; then
-          echo "Container logos-app encontrado. Subindo serviços do PHP..."
-          cd /home/ubuntu/log-os/.infra/prod/php
-          docker-compose up -d --force-recreate
-
           echo "Copiando arquivo .env para dentro do container logos-app..."
           docker cp "$ENV_PATH" logos-app:/var/www/.env
         else
@@ -538,17 +539,17 @@ runs:
         fi
 
         if container_exists logos-supervisor; then
-          echo "Container logos-supervisor encontrado. Subindo serviços do Supervisor..."
-          cd /home/ubuntu/log-os/.infra/prod/supervisor
-          docker-compose up -d --force-recreate
+          echo "Copiando arquivo .env para dentro do container logos-supervisor..."
+          docker cp "$ENV_PATH" logos-supervisor:/var/www/.env
         else
-          echo "Aviso: O container logos-supervisor não está rodando."
+          echo "Erro: O container logos-supervisor não está rodando. Não foi possível copiar o .env."
+          exit 1
         fi
 
-        if container_exists logos-reverb; then
-          echo "Container logos-reverb está rodando."
+        if container_exists logos-supervisor; then
+          echo "Container logos-supervisor está rodando."
         else
-          echo "Aviso: O container logos-reverb não está rodando."
+          echo "Aviso: O container logos-supervisor não está rodando."
         fi
 
         echo "Processo finalizado com sucesso."
