@@ -290,11 +290,11 @@ runs:
         mkdir -p /tmp/deploy/php
         mkdir -p /tmp/deploy/supervisor
 
+        cp "$SOURCE_DIR/docker-compose.yml" /tmp/deploy/
         cp "$SOURCE_DIR/nginx/default.conf" /tmp/deploy/nginx/
         cp "$SOURCE_DIR/php/Dockerfile" /tmp/deploy/php/
         cp "$SOURCE_DIR/supervisor/Dockerfile" /tmp/deploy/supervisor/
         cp "$SOURCE_DIR/supervisor/supervisord.conf" /tmp/deploy/supervisor/
-        cp "$SOURCE_DIR/supervisor/docker-compose.yml" /tmp/deploy/supervisor/
       fi
 
       tar -czf /tmp/deploy.tar.gz -C /tmp/ deploy/
@@ -482,10 +482,10 @@ runs:
           mkdir -p "$TARGET_DIR/php"
           mkdir -p "$TARGET_DIR/supervisor"
 
+          mv /tmp/deploy/docker-compose.yml "$TARGET_DIR/docker-compose.yml"
           mv /tmp/deploy/nginx/default.conf "$TARGET_DIR/nginx/default.conf"
           mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
           mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
-          mv /tmp/deploy/supervisor/docker-compose.yml "$TARGET_DIR/supervisor/docker-compose.yml"
           mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
         fi
 
