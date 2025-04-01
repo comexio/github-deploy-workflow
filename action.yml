@@ -431,8 +431,8 @@ runs:
         set -e
         tar -xzf /tmp/deploy.tar.gz -C /tmp/
         export GITHUB_COMMIT=${{ env.TAG }}
-        BRANCH_NAME="${GITHUB_REF##*/}"
-
+        BRANCH_NAME="rc/$GITHUB_COMMIT"
+        # BRANCH_NAME="${GITHUB_REF##*/}"
 
         cd /home/ubuntu/log-os/
 
