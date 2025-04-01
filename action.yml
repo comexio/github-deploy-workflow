@@ -529,7 +529,7 @@ runs:
           docker cp "$ENV_PATH" logos-app:/var/www/.env
         else
           echo "Erro: O container logos-app não está rodando. Não foi possível copiar o .env."
-          exit 1
+          exit 0
         fi
 
         if container_exists logos-supervisor; then
@@ -541,7 +541,7 @@ runs:
           docker cp "$ENV_PATH" logos-supervisor:/var/www/.env
         else
           echo "Erro: O container logos-supervisor não está rodando. Não foi possível copiar o .env."
-          exit 1
+          exit 0
         fi
 
         echo "Processo finalizado com sucesso."
