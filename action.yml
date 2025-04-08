@@ -437,7 +437,18 @@ runs:
             exit 1
         fi
 
-        find /tmp/deploy -type f -name 'Dockerfile' -exec sed -i -e "s|:latest|:${GITHUB_COMMIT}|g" -e 's|ecr-prd-log-os-base-php|ecr-prd-log-os-php-final|g' -e 's|ecr-prd-log-os-base-supervisor|ecr-prd-log-os-supervisor-final|g' {} +
+        # Define o prefixo do ECR com base na branch
+        if [[ "$BRANCH_NAME" == "main" || "$GITHUB_REF" == "refs/heads/main" ]]; then
+          ECR_PREFIX="ecr-prd"
+        else
+          ECR_PREFIX="ecr-hml"
+        fi
+
+        # Aplica os replaces nos Dockerfiles
+        find /tmp/deploy -type f -name 'Dockerfile' -exec sed -i \
+          -e "s|:latest|:${GITHUB_COMMIT}|g" \
+          -e "s|ecr-.*-log-os-base-php|${ECR_PREFIX}-log-os-php-final|g" \
+          -e "s|ecr-.*-log-os-base-supervisor|${ECR_PREFIX}-log-os-supervisor-final|g" {} +
 
         TARGET_DIR="/home/ubuntu/log-os/.infra/homol"
 
