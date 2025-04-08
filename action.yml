@@ -711,6 +711,35 @@ runs:
 
         echo "✅ Processo concluído com sucesso."
 
+  - name: Instalando utilitários nos containers
+    uses: appleboy/ssh-action@master
+    with:
+      username: ${{ inputs.SSH_USER }}
+      key_path: ssh_key.pem
+      host: ${{ env.EC2_IPS_COMMA }}
+      script: |
+        set -e
+
+        echo "🔍 Listando containers ativos nesta máquina:"
+        docker ps --format ' - {{.Names}}'
+
+        install_utils() {
+          CONTAINER_NAME=$1
+
+          if docker ps --format '{{.Names}}' | grep -xq "$CONTAINER_NAME"; then
+            echo "✅ Instalando utilitários em $CONTAINER_NAME..."
+            docker exec $CONTAINER_NAME apt-get update
+            docker exec $CONTAINER_NAME apt-get install -y poppler-utils
+          else
+            echo "⚠️ Container $CONTAINER_NAME não encontrado. Pulando..."
+          fi
+        }
+
+        install_utils logos-app
+        install_utils logos-supervisor
+
+        echo "✅ Processo concluído com sucesso."
+
   - name: Encerrando a VPN
     if: always() && inputs.OVPN_CONFIG_FILE != ''
     shell: bash
