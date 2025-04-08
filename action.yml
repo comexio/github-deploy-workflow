@@ -156,21 +156,6 @@ runs:
       aws s3 cp s3://${{ inputs.AWS_S3_ENVFILES_BUCKET }}/${{ inputs.ENV_FILE_PATH }} /tmp/env
     shell: bash
 
-  - name: Obtendo secret do Secret Manager
-    if: ${{ inputs.SECRET_MANAGER_KEY != '' }}
-    uses: t-botz/aws-secrets-manager-read-action@45282af736fa0ae7e0559ed105b42538344cb864
-    with:
-      secret-id: ${{ inputs.SECRET_MANAGER_KEY }}
-      mask-json-values: true
-      append-to-env-file: /tmp/env
-
-  - name: Criptografando arquivo env com senha
-    if: ${{ inputs.ENV_ENCRYPTION_PASSWORD != '' }}
-    run: |
-      # gpg -d --batch --passphrase "${{ inputs.ENV_ENCRYPTION_PASSWORD }}" /tmp/env.gpg > .env
-      gpg -c --batch --cipher-algo AES256 --passphrase "${{ inputs.ENV_ENCRYPTION_PASSWORD }}" /tmp/env
-    shell: bash
-
   # ##################  PUBLISH IMAGE # ##################
 
   - name: Adicionando Github Token ao Composer
@@ -184,53 +169,32 @@ runs:
       EOF
     shell: bash
 
-  - name: Autenticando no ECR (se aplicável)
-    if: ${{ inputs.ECR_REGISTRY != '' }}
-    uses: docker/login-action@v3
-    with:
-      registry: ${{ inputs.ECR_REGISTRY }}
-
-  - name: Gerando Tags e Labels para usar na imagem
-    id: meta
-    uses: docker/metadata-action@v4
-    with:
-      images: ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}
-      flavor: latest=true
-      tags: |
-        type=raw,value=${{ env.TAG }}
-        type=sha,format=long,prefix=
-      labels: |
-        org.opencontainers.image.version=${{ env.TAG }}
-
-  - name: Build e Push da Imagem Docker (se aplicável)
-    if: ${{ inputs.DOCKERFILE_PATH != '' }}
-    uses: docker/build-push-action@v3
-    with:
-      context: .
-      file: ${{ inputs.DOCKERFILE_PATH }}
-      tags: |
-        ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
-        ${{ steps.meta.outputs.tags }}
-      labels: ${{ steps.meta.outputs.labels }}
-      push: true
-      no-cache: true
-      build-args: |
-        IMAGE=${{ inputs.BASE_IMAGE }}
-
-  # ##################  DEPLOY IMAGE # ##################
-
-  - name: Criando e Armazenando Artefato de Deploy (se aplicável)
-    if: ${{ inputs.DEPLOY_FILES != '' }}
+  - name: Criando e Armazenando Artefato de Deploy
     run: |
-      mkdir -p /tmp/deploy
-      set -f
+      set -euo pipefail
 
-      for file in ${{ inputs.DEPLOY_FILES }}; do
-        echo "Copiando $file para /tmp/deploy/"
-        DEST_DIR="/tmp/deploy/$(dirname "$file")"
-        mkdir -p "$DEST_DIR"
-        cp "$file" "$DEST_DIR/" || { echo "Erro ao copiar $file"; exit 1; }
-      done
+      BRANCH_NAME="${GITHUB_REF##*/}"
+
+      if [[ "$BRANCH_NAME" == "main" ]]; then
+        echo "Branch é 'main', copiando estrutura de .infra/prod"
+        SOURCE_DIR=".infra/prod"
+        mkdir -p /tmp/deploy/api
+        mkdir -p /tmp/deploy/celery
+        mkdir -p /tmp/deploy/flower
+
+        cp "$SOURCE_DIR/Dockerfile" /tmp/deploy/
+        cp "$SOURCE_DIR/api/docker-compose.yml" /tmp/deploy/api/
+        cp "$SOURCE_DIR/celery/docker-compose.yml" /tmp/deploy/celery/
+        cp "$SOURCE_DIR/flower/docker-compose.yml" /tmp/deploy/flower/
+
+      else
+        echo "Branch '$BRANCH_NAME', copiando estrutura de .infra/homol"
+        SOURCE_DIR=".infra/homol"
+        mkdir -p /tmp/deploy/
+
+        cp "$SOURCE_DIR/docker-compose.yml" /tmp/deploy/
+        cp "$SOURCE_DIR/Dockerfile" /tmp/deploy/
+      fi
 
       tar -czf /tmp/deploy.tar.gz -C /tmp/ deploy/
     shell: bash
@@ -356,66 +320,72 @@ runs:
         echo "EC2_IPS_COMMA=${{ env.EC2_IPS }}" >> $GITHUB_ENV
       fi
 
-  - name: Executando comandos remotos nas instâncias EC2 por nome
-    shell: bash
-    run: |
-      IFS=' ' read -r -a IPS <<< "${EC2_IPS}"
-      IFS=' ' read -r -a NAMES <<< "${{ inputs.SERVER_LIST }}"
+  - name: Manipulando tag nova no manifestos
+    uses: appleboy/ssh-action@master
+    with:
+      username: ${{ inputs.SSH_USER }}
+      key_path: ssh_key.pem
+      host: ${{ env.EC2_IPS_COMMA }}
+      script: |
+        set -e
+        tar -xzf /tmp/deploy.tar.gz -C /tmp/
+        export GITHUB_COMMIT=${{ env.TAG }}
+        BRANCH_NAME="rc/$GITHUB_COMMIT"
 
-      if [ "${#IPS[@]}" -ne "${#NAMES[@]}" ]; then
-        echo "::error::Quantidade de IPs e nomes de instância não correspondem!"
-        exit 1
-      fi
+        cd /home/ubuntu/log-os/
 
-      for i in "${!IPS[@]}"; do
-        IP="${IPS[$i]}"
-        NAME="${NAMES[$i]}"
-        echo "Conectando na instância: $NAME ($IP)..."
+        echo "Baixando todas as branches e tags remotas..."
+        git fetch --all --prune
 
-        COMPOSE_PATH=""
-        BRANCH_NAME="${{ env.TAG }}"
+        echo "Commitando mudanças antes de trocar para $BRANCH_NAME..."
+        git config --global user.email "github-actions@github.com"
+        git config --global user.name "GitHub Actions"
+        git add .
+        git commit -m "Atualização automática do Dockerfile antes de trocar para a branch $BRANCH_NAME" || echo "Nenhuma mudança para commit."
 
-        if [[ "$BRANCH_NAME" == rc* ]]; then
-          COMPOSE_PATH="/tmp/deploy/.infra/homol/docker-compose.yml"
-        elif [[ "$BRANCH_NAME" == main* ]]; then
-          if [[ "$NAME" == *celery* ]]; then
-            COMPOSE_PATH="/tmp/deploy/.infra/prod/celery/docker-compose.yml"
-          elif [[ "$NAME" == *flower* ]]; then
-            COMPOSE_PATH="/tmp/deploy/.infra/prod/flower/docker-compose.yml"
-          elif [[ "$NAME" == *api* ]]; then
-            COMPOSE_PATH="/tmp/deploy/.infra/prod/api/docker-compose.yml"
-          else
-            echo "::error::Instância $NAME não reconhecida para produção."
-            exit 1
-          fi
+        if git ls-remote --exit-code --heads origin "$BRANCH_NAME" >/dev/null; then
+            echo "Trocando para a branch $BRANCH_NAME..."
+            git checkout "$BRANCH_NAME"
+            git reset --hard origin/$BRANCH_NAME
+            git pull origin "$BRANCH_NAME"
         else
-          echo "::error::Branch inválida: $BRANCH_NAME"
-          exit 1
+            echo "Erro: A branch '$BRANCH_NAME' não existe remotamente."
+            exit 1
         fi
 
-        echo "Rodando docker-compose com arquivo: $COMPOSE_PATH"
+        # Substituir :latest pela nova tag
+        find /tmp/deploy -type f -name 'Dockerfile' -exec sed -i "s|:latest|:${GITHUB_COMMIT}|g" {} +
 
-        ssh -o StrictHostKeyChecking=no -i ssh_key.pem "${{ inputs.SSH_USER }}@$IP" \
-          "set -e && \
-          echo 'Descompactando deploy.tar.gz...' && \
-          tar -xzf /tmp/deploy.tar.gz -C /tmp/ && \
-          export GITHUB_COMMIT='${{ env.TAG }}' && \
-          echo 'Atualizando Dockerfiles...' && \
-          find /tmp/deploy -type f -name 'Dockerfile' -exec sed -i \"s|:latest|:\$GITHUB_COMMIT|g\" {} + && \
-          echo 'Executando docker-compose...' && \
-          docker-compose -f $COMPOSE_PATH up -d --build && \
-          echo 'Limpando arquivos temporários...' && \
-          rm -rf /tmp/deploy /tmp/deploy.tar.gz" || {
-            echo "::error::Erro ao executar comandos na instância $NAME ($IP)"
-            exit 1
-          }
+        TARGET_DIR="/home/ubuntu/log-os/.infra/homol"
 
-        echo "Deploy finalizado para $NAME ($IP)"
-      done
+        if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Branch é 'main', copiando para .infra/prod"
+          TARGET_DIR="/home/ubuntu/log-os/.infra/prod"
 
-  - name: Configurar permissões da chave SSH
-    shell: bash
-    run: chmod 600 ssh_key.pem
+          mkdir -p "$TARGET_DIR/php"
+          mkdir -p "$TARGET_DIR/supervisor"
+
+          mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
+          mv /tmp/deploy/php/default.conf "$TARGET_DIR/php/default.conf"
+          mv /tmp/deploy/php/docker-compose.yml "$TARGET_DIR/php/docker-compose.yml"
+
+          mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
+          mv /tmp/deploy/supervisor/docker-compose.yml "$TARGET_DIR/supervisor/docker-compose.yml"
+          mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
+
+        else
+          echo "Branch '$BRANCH_NAME', copiando para .infra/homol"
+
+          mkdir -p "$TARGET_DIR/nginx"
+          mkdir -p "$TARGET_DIR/php"
+          mkdir -p "$TARGET_DIR/supervisor"
+
+          mv /tmp/deploy/docker-compose.yml "$TARGET_DIR/docker-compose.yml"
+          mv /tmp/deploy/nginx/default.conf "$TARGET_DIR/nginx/default.conf"
+          mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
+          mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
+          mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
+        fi
 
   - name: Encerrando a VPN (se aplicável)
     if: always() && inputs.OVPN_CONFIG_FILE != ''
