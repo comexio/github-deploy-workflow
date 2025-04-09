@@ -490,6 +490,8 @@ runs:
       script: |
         set -e
 
+        aws ecr get-login-password --region sa-east-1 | docker login --username AWS --password-stdin 081818032380.dkr.ecr.sa-east-1.amazonaws.com
+
         echo "Definindo utilitário para verificar containers..."
         container_exists() {
           local name="$1"
