@@ -182,10 +182,10 @@ runs:
         mkdir -p /tmp/deploy/celery
         mkdir -p /tmp/deploy/flower
 
-        cp "$SOURCE_DIR/Dockerfile" /tmp/deploy/
         cp "$SOURCE_DIR/api/docker-compose.yml" /tmp/deploy/api/
         cp "$SOURCE_DIR/celery/docker-compose.yml" /tmp/deploy/celery/
         cp "$SOURCE_DIR/flower/docker-compose.yml" /tmp/deploy/flower/
+        cp "$SOURCE_DIR/Dockerfile" /tmp/deploy/
 
       else
         echo "Branch '$BRANCH_NAME', copiando estrutura de .infra/homol"
@@ -328,11 +328,14 @@ runs:
       host: ${{ env.EC2_IPS_COMMA }}
       script: |
         set -e
+        # Extrai o artefato de deploy
         tar -xzf /tmp/deploy.tar.gz -C /tmp/
+
+        # Define a tag e a branch de destino
         export GITHUB_COMMIT=${{ env.TAG }}
         BRANCH_NAME="rc/$GITHUB_COMMIT"
 
-        cd /home/ubuntu/log-os/
+        cd /home/ubuntu/log-attributes/
 
         echo "Baixando todas as branches e tags remotas..."
         git fetch --all --prune
@@ -346,45 +349,36 @@ runs:
         if git ls-remote --exit-code --heads origin "$BRANCH_NAME" >/dev/null; then
             echo "Trocando para a branch $BRANCH_NAME..."
             git checkout "$BRANCH_NAME"
-            git reset --hard origin/$BRANCH_NAME
+            git reset --hard origin/"$BRANCH_NAME"
             git pull origin "$BRANCH_NAME"
         else
             echo "Erro: A branch '$BRANCH_NAME' não existe remotamente."
             exit 1
         fi
 
-        # Substituir :latest pela nova tag
+        # Atualiza a referência da tag :latest para a nova tag no(s) Dockerfile(s)
         find /tmp/deploy -type f -name 'Dockerfile' -exec sed -i "s|:latest|:${GITHUB_COMMIT}|g" {} +
 
-        TARGET_DIR="/home/ubuntu/log-os/.infra/homol"
-
-        if [[ "$BRANCH_NAME" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
-          echo "Branch é 'main', copiando para .infra/prod"
-          TARGET_DIR="/home/ubuntu/log-os/.infra/prod"
-
-          mkdir -p "$TARGET_DIR/php"
-          mkdir -p "$TARGET_DIR/supervisor"
-
-          mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
-          mv /tmp/deploy/php/default.conf "$TARGET_DIR/php/default.conf"
-          mv /tmp/deploy/php/docker-compose.yml "$TARGET_DIR/php/docker-compose.yml"
-
-          mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
-          mv /tmp/deploy/supervisor/docker-compose.yml "$TARGET_DIR/supervisor/docker-compose.yml"
-          mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
-
+        # Copia os arquivos extraídos para os diretórios corretos conforme a branch
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "Branch é 'main', copiando para .infra/prod"
+            TARGET_DIR="/home/ubuntu/log-attributes/.infra/prod"
+            mkdir -p "$TARGET_DIR/api" "$TARGET_DIR/celery" "$TARGET_DIR/flower"
+            
+            # Para o ambiente de produção, os arquivos foram organizados em subpastas:
+            mv /tmp/deploy/Dockerfile "$TARGET_DIR/"
+            mv /tmp/deploy/.env.example "$TARGET_DIR/"
+            mv /tmp/deploy/api/docker-compose.yml "$TARGET_DIR/api/"
+            mv /tmp/deploy/celery/docker-compose.yml "$TARGET_DIR/celery/"
+            mv /tmp/deploy/flower/docker-compose.yml "$TARGET_DIR/flower/"
         else
-          echo "Branch '$BRANCH_NAME', copiando para .infra/homol"
-
-          mkdir -p "$TARGET_DIR/nginx"
-          mkdir -p "$TARGET_DIR/php"
-          mkdir -p "$TARGET_DIR/supervisor"
-
-          mv /tmp/deploy/docker-compose.yml "$TARGET_DIR/docker-compose.yml"
-          mv /tmp/deploy/nginx/default.conf "$TARGET_DIR/nginx/default.conf"
-          mv /tmp/deploy/php/Dockerfile "$TARGET_DIR/php/Dockerfile"
-          mv /tmp/deploy/supervisor/Dockerfile "$TARGET_DIR/supervisor/Dockerfile"
-          mv /tmp/deploy/supervisor/supervisord.conf "$TARGET_DIR/supervisor/supervisord.conf"
+            echo "Branch não é 'main', copiando para .infra/homol"
+            TARGET_DIR="/home/ubuntu/log-attributes/.infra/homol"
+            mkdir -p "$TARGET_DIR/"
+            
+            # Para ambiente de homologação, os arquivos estão na raiz do diretório
+            mv /tmp/deploy/Dockerfile "$TARGET_DIR/"
+            mv /tmp/deploy/docker-compose.yml "$TARGET_DIR/"
         fi
 
   - name: Encerrando a VPN (se aplicável)
@@ -394,28 +388,27 @@ runs:
       echo "Desconectando VPN..."
       sudo killall openvpn
       sleep 5
+  # - name: Criar PR para main se a branch for RC
+  #   if: startsWith(github.ref, 'refs/heads/rc/')
+  #   id: create-pr
+  #   shell: bash
+  #   run: |
+  #     CURRENT_BRANCH=$(echo "${GITHUB_REF#refs/heads/}")
+  #     echo "Branch atual: $CURRENT_BRANCH"
 
-  - name: Criar PR para main se a branch for RC
-    if: startsWith(github.ref, 'refs/heads/rc/')
-    id: create-pr
-    shell: bash
-    run: |
-      CURRENT_BRANCH=$(echo "${GITHUB_REF#refs/heads/}")
-      echo "Branch atual: $CURRENT_BRANCH"
+  #     PR_TITLE="[RC] branch $CURRENT_BRANCH to Main"
+  #     PR_BODY="Pull Request RC to Main"
 
-      PR_TITLE="[RC] branch $CURRENT_BRANCH to Main"
-      PR_BODY="Pull Request RC to Main"
+  #     echo "Verificando se a PR já existe..."
 
-      echo "Verificando se a PR já existe..."
+  #     EXISTING_PR=$(gh pr list --base main --head "$CURRENT_BRANCH" --json number --jq '.[0].number')
 
-      EXISTING_PR=$(gh pr list --base main --head "$CURRENT_BRANCH" --json number --jq '.[0].number')
+  #     if [[ -n "$EXISTING_PR" ]]; then
+  #       echo "Pull Request já existe: #$EXISTING_PR"
+  #       exit 0
+  #     fi
 
-      if [[ -n "$EXISTING_PR" ]]; then
-        echo "Pull Request já existe: #$EXISTING_PR"
-        exit 0
-      fi
-
-      echo "Criando PR: $PR_TITLE"
-      gh pr create --base="main" --head="$CURRENT_BRANCH" --title="$PR_TITLE" --body="$PR_BODY"
-    env:
-      GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+  #     echo "Criando PR: $PR_TITLE"
+  #     gh pr create --base="main" --head="$CURRENT_BRANCH" --title="$PR_TITLE" --body="$PR_BODY"
+  #   env:
+  #     GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
