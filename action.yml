@@ -395,9 +395,8 @@ runs:
 
         echo "Definindo utilitário para verificar containers..."
         container_exists() {
-          local name="$1"
-          echo "Procurando container com nome exato: $name"
-          docker ps --format '{{.Names}}' | grep -xq "$name"
+          local container_name="$1"
+          docker ps --format '{{.Names}}' | grep -q "$container_name"
         }
 
         ENV_PATH="/home/ubuntu/log-attributes/.env"
@@ -426,50 +425,29 @@ runs:
         if [[ "$IS_PROD" == "true" ]]; then
           echo "Iniciando serviços para ambiente de produção..."
 
-          if container_exists api; then
-            echo "Subindo serviço api..."
-            cd "$INFRA_PATH/api"
-            docker-compose up -d --force-recreate
-            sleep 5
-            docker cp "$ENV_PATH" api:/var/www/.env || echo "Falha ao copiar .env para api."
-          else
-            echo "Container api não está presente nesta máquina. Pulando..."
-          fi
-
-          if container_exists celery; then
-            echo "Subindo serviço celery..."
-            cd "$INFRA_PATH/celery"
-            docker-compose up -d --force-recreate
-            sleep 5
-            docker cp "$ENV_PATH" celery:/var/www/.env || echo "Falha ao copiar .env para celery."
-          else
-            echo "Container celery não está presente nesta máquina. Pulando..."
-          fi
-
-          if container_exists flower; then
-            echo "Subindo serviço flower..."
-            cd "$INFRA_PATH/flower"
-            docker-compose up -d --force-recreate
-            sleep 5
-            docker cp "$ENV_PATH" flower:/var/www/.env || echo "Falha ao copiar .env para flower."
-          else
-            echo "Container flower não está presente nesta máquina. Pulando..."
-          fi
+          for SERVICE in api celery flower; do
+            if container_exists "$SERVICE"; then
+              echo "Subindo serviço $SERVICE..."
+              cd "$INFRA_PATH/$SERVICE"
+              docker-compose up -d --build --force-recreate
+              sleep 5
+              docker cp "$ENV_PATH" "$SERVICE":/var/www/.env || echo "Falha ao copiar .env para $SERVICE."
+            else
+              echo "Container $SERVICE não está presente nesta máquina. Pulando..."
+            fi
+          done
         else
           echo "Iniciando serviço para ambiente de homologação (estrutura simples na raiz)..."
           cd "$INFRA_PATH"
-          docker-compose up -d --force-recreate
+          docker-compose up -d --build --force-recreate
+          sleep 5
 
-          # Detecta nome do container a partir do docker-compose.yml
-          CONTAINERS=$(docker-compose ps --services)
+          echo "Identificando containers reais criados por docker-compose..."
+          CONTAINER_NAMES=$(docker-compose ps -q | xargs docker inspect --format '{{ .Name }}' | sed 's|/||g')
 
-          for SERVICE in $CONTAINERS; do
-            if container_exists "$SERVICE"; then
-              echo "Copiando .env para o container $SERVICE..."
-              docker cp "$ENV_PATH" "$SERVICE":/var/www/.env || echo "Falha ao copiar .env para $SERVICE."
-            else
-              echo "Container $SERVICE não está presente ou ainda não iniciou."
-            fi
+          for CONTAINER in $CONTAINER_NAMES; do
+            echo "Copiando .env para o container $CONTAINER..."
+            docker cp "$ENV_PATH" "$CONTAINER":/var/www/.env || echo "Falha ao copiar .env para $CONTAINER."
           done
         fi
 
