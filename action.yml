@@ -381,6 +381,84 @@ runs:
             mv /tmp/deploy/docker-compose.yml "$TARGET_DIR/"
         fi
 
+  - name: Subindo nova tag
+    uses: appleboy/ssh-action@master
+    with:
+      username: ${{ inputs.SSH_USER }}
+      key_path: ssh_key.pem
+      host: ${{ env.EC2_IPS_COMMA }}
+      script: |
+        set -e
+
+        echo "Autenticando no ECR..."
+        aws ecr get-login-password --region sa-east-1 | docker login --username AWS --password-stdin 081818032380.dkr.ecr.sa-east-1.amazonaws.com
+
+        echo "Definindo utilitário para verificar containers..."
+        container_exists() {
+          local name="$1"
+          echo "Procurando container com nome exato: $name"
+          docker ps --format '{{.Names}}' | grep -xq "$name"
+        }
+
+        ENV_PATH="/home/ubuntu/log-attributes/.env"
+        S3_ENV_PATH="s3://logcomex-environments-files/log-attributes/.env.homol"
+        INFRA_PATH="/home/ubuntu/log-attributes/.infra/homol"
+
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Branch é 'main', alterando para ambiente de produção..."
+          S3_ENV_PATH="s3://logcomex-environments-files/log-attributes/.env.prod"
+          INFRA_PATH="/home/ubuntu/log-attributes/.infra/prod"
+        fi
+
+        echo "Baixando o arquivo de ambiente do S3..."
+        if aws s3 ls "$S3_ENV_PATH" > /dev/null 2>&1; then
+          aws s3 cp "$S3_ENV_PATH" "$ENV_PATH"
+        else
+          echo "Erro: O arquivo $S3_ENV_PATH não foi encontrado no S3."
+          exit 1
+        fi
+
+        echo "Verificando containers antes de subir serviços:"
+        docker ps --format ' - {{.Names}}'
+
+        if container_exists api; then
+          echo "Subindo serviço api..."
+          cd "$INFRA_PATH/api"
+          docker-compose up -d --build --force-recreate
+          echo "Aguardando container api iniciar..."
+          sleep 5
+          echo "Copiando .env para o container api..."
+          docker cp "$ENV_PATH" api:/var/www/.env || echo "Container api pode não usar .env nesse caminho."
+        else
+          echo "Container api não está presente nesta máquina. Pulando..."
+        fi
+
+        if container_exists celery; then
+          echo "Subindo serviço celery..."
+          cd "$INFRA_PATH/celery"
+          docker-compose up -d --build --force-recreate
+          echo "Aguardando container celery iniciar..."
+          sleep 5
+          echo "Copiando .env para o container celery..."
+          docker cp "$ENV_PATH" celery:/var/www/.env || echo "Container celery pode não usar .env nesse caminho."
+        else
+          echo "Container celery não está presente nesta máquina. Pulando..."
+        fi
+
+        if container_exists flower; then
+          echo "Subindo serviço flower..."
+          cd "$INFRA_PATH/flower"
+          docker-compose up -d --build --force-recreate
+          echo "Aguardando container flower iniciar..."
+          sleep 5
+          echo "Copiando .env para o container flower..."
+          docker cp "$ENV_PATH" flower:/var/www/.env || echo "Container flower pode não usar .env nesse caminho."
+        else
+          echo "Container flower não está presente nesta máquina. Pulando..."
+        fi
+
+        echo "Processo finalizado com sucesso."
+
   - name: Encerrando a VPN (se aplicável)
     if: always() && inputs.OVPN_CONFIG_FILE != ''
     shell: bash
