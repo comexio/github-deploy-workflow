@@ -460,27 +460,28 @@ runs:
       echo "Desconectando VPN..."
       sudo killall openvpn
       sleep 5
-  # - name: Criar PR para main se a branch for RC
-  #   if: startsWith(github.ref, 'refs/heads/rc/')
-  #   id: create-pr
-  #   shell: bash
-  #   run: |
-  #     CURRENT_BRANCH=$(echo "${GITHUB_REF#refs/heads/}")
-  #     echo "Branch atual: $CURRENT_BRANCH"
 
-  #     PR_TITLE="[RC] branch $CURRENT_BRANCH to Main"
-  #     PR_BODY="Pull Request RC to Main"
+  - name: Criar PR para main se a branch for RC
+    if: startsWith(github.ref, 'refs/heads/rc/')
+    id: create-pr
+    shell: bash
+    run: |
+      CURRENT_BRANCH=$(echo "${GITHUB_REF#refs/heads/}")
+      echo "Branch atual: $CURRENT_BRANCH"
 
-  #     echo "Verificando se a PR já existe..."
+      PR_TITLE="[RC] branch $CURRENT_BRANCH to Main"
+      PR_BODY="Pull Request RC to Main"
 
-  #     EXISTING_PR=$(gh pr list --base main --head "$CURRENT_BRANCH" --json number --jq '.[0].number')
+      echo "Verificando se a PR já existe..."
 
-  #     if [[ -n "$EXISTING_PR" ]]; then
-  #       echo "Pull Request já existe: #$EXISTING_PR"
-  #       exit 0
-  #     fi
+      EXISTING_PR=$(gh pr list --base main --head "$CURRENT_BRANCH" --json number --jq '.[0].number')
 
-  #     echo "Criando PR: $PR_TITLE"
-  #     gh pr create --base="main" --head="$CURRENT_BRANCH" --title="$PR_TITLE" --body="$PR_BODY"
-  #   env:
-  #     GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+      if [[ -n "$EXISTING_PR" ]]; then
+        echo "Pull Request já existe: #$EXISTING_PR"
+        exit 0
+      fi
+
+      echo "Criando PR: $PR_TITLE"
+      gh pr create --base="main" --head="$CURRENT_BRANCH" --title="$PR_TITLE" --body="$PR_BODY"
+    env:
+      GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
