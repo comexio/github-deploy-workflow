@@ -367,7 +367,6 @@ runs:
             
             # Para o ambiente de produção, os arquivos foram organizados em subpastas:
             mv /tmp/deploy/Dockerfile "$TARGET_DIR/"
-            mv /tmp/deploy/.env.example "$TARGET_DIR/"
             mv /tmp/deploy/api/docker-compose.yml "$TARGET_DIR/api/"
             mv /tmp/deploy/celery/docker-compose.yml "$TARGET_DIR/celery/"
             mv /tmp/deploy/flower/docker-compose.yml "$TARGET_DIR/flower/"
