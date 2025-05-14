@@ -27,10 +27,19 @@ inputs:
   IMAGE_NAME:
     required: false
     description: Nome da imagem no ECR
+  SUPERVISOR_IMAGE_NAME:
+    required: false
+    description: Nome da imagem no ECR
   DOCKERFILE_PATH:
     required: false
     description: Caminho para o Dockerfile
+  SUPERVISOR_DOCKERFILE_PATH:
+    required: false
+    description: Caminho para o Dockerfile
   BASE_IMAGE:
+    required: false
+    description: Imagem base (se necessário)
+  SUPERVISOR_BASE_IMAGE:
     required: false
     description: Imagem base (se necessário)
   DEPLOY_FILES:
@@ -68,17 +77,69 @@ runs:
     id: find-pre-release
     shell: bash
     run: |
+      echo "Buscando a última pre-release..."
+
       TAG=$(curl -s -H "Authorization: Bearer ${{ inputs.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/releases?per_page=10" | \
-            jq -r '[.[] | select(.prerelease == true)] | first | .tag_name')
+            "https://api.github.com/repos/${{ github.repository }}/releases?per_page=100" | \
+            jq -r '[.[] | select(.prerelease == true)] | sort_by(.created_at) | last | .tag_name')
 
       if [[ -z "$TAG" || "$TAG" == "null" ]]; then
-        echo "::error::Nenhuma pre-release encontrada!"
+        echo "Nenhuma pre-release encontrada! Continuando sem pré-release..."
+        TAG=""
+      fi
+
+      echo "TAG_PRERELEASE=$TAG" >> $GITHUB_ENV
+      echo "TAG=$TAG" >> $GITHUB_ENV
+    env:
+      GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+
+  - name: Gerenciar Última Release (Latest)
+    if: startsWith(github.ref, 'refs/heads/main')
+    shell: bash
+    run: |
+      echo "Verificando a versão mais recente..."
+
+      # Obtém a última versão latest existente
+      CURRENT_LATEST=$(gh release view --json tagName --jq .tagName || echo "")
+
+      echo "Última versão latest: ${CURRENT_LATEST}"
+
+      # Obtém a última release estável
+      TAG_LATEST=$(curl -s -H "Authorization: Bearer ${{ inputs.GITHUB_TOKEN }}" \
+                  -H "Accept: application/vnd.github+json" \
+                  "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
+                  jq -r '.tag_name')
+
+      if [[ -z "$TAG_LATEST" || "$TAG_LATEST" == "null" ]]; then
+        echo "Nenhuma release estável encontrada!"
+        TAG_LATEST=""
+      fi
+
+      # Pega a versão mais recente disponível (pre-release tem prioridade)
+      TAG="${TAG_PRERELEASE:-$TAG_LATEST}"
+
+      if [[ -z "$TAG" ]]; then
+        echo "Nenhuma versão válida encontrada! Saindo..."
         exit 1
       fi
 
-      echo "TAG=$TAG" >> $GITHUB_ENV
+      # Função para comparar versões (considerando SemVer)
+      function version_greater_or_equal() {
+        printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1 | grep -q "^$1$"
+      }
+
+      # Se a nova versão for maior ou igual à latest, atualiza a tag latest
+      if version_greater_or_equal "${TAG}" "${CURRENT_LATEST}"; then
+        echo "A versão ${TAG} é mais recente que ${CURRENT_LATEST}. Atualizando latest..."
+        gh release edit "${TAG}" --prerelease=false --latest
+      else
+        echo "A versão ${TAG} é mais antiga que ${CURRENT_LATEST}. Apenas removendo pré-release."
+        gh release edit "${TAG}" --prerelease=false
+      fi
+
+      # Define a variável TAG no ambiente para os próximos steps
+      echo "TAG=${TAG}" >> $GITHUB_ENV
     env:
       GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
 
@@ -95,30 +156,6 @@ runs:
       aws s3 cp s3://${{ inputs.AWS_S3_ENVFILES_BUCKET }}/${{ inputs.ENV_FILE_PATH }} /tmp/env
     shell: bash
 
-  - name: Obtendo secret do Secret Manager
-    if: ${{ inputs.SECRET_MANAGER_KEY != '' }}
-    uses: t-botz/aws-secrets-manager-read-action@45282af736fa0ae7e0559ed105b42538344cb864
-    with:
-      secret-id: ${{ inputs.SECRET_MANAGER_KEY }}
-      mask-json-values: true
-      append-to-env-file: /tmp/env
-
-  - name: Criptografando arquivo env com senha
-    if: ${{ inputs.ENV_ENCRYPTION_PASSWORD != '' }}
-    run: |
-      # gpg -d --batch --passphrase "${{ inputs.ENV_ENCRYPTION_PASSWORD }}" /tmp/env.gpg > .env
-      gpg -c --batch --cipher-algo AES256 --passphrase "${{ inputs.ENV_ENCRYPTION_PASSWORD }}" /tmp/env
-    shell: bash
-
-  # - name: Ajustando o env de migrations
-  #   run: |
-  #     cp .env .env.migrate
-  #     sed -i "s/DB_USERNAME=.*//" .env.migrate
-  #     sed -i "s/DB_PASSWORD=.*//" .env.migrate
-  #     sed -i "s/DB_MIGRATION_USERNAME/DB_USERNAME/" .env.migrate
-  #     sed -i "s/DB_MIGRATION_PASSWORD/DB_PASSWORD/" .env.migrate
-  #   shell: bash
-
   # ##################  PUBLISH IMAGE # ##################
 
   - name: Adicionando Github Token ao Composer
@@ -132,59 +169,32 @@ runs:
       EOF
     shell: bash
 
-  - name: Autenticando no ECR (se aplicável)
-    if: ${{ inputs.ECR_REGISTRY != '' }}
-    uses: docker/login-action@v3
-    with:
-      registry: ${{ inputs.ECR_REGISTRY }}
-
-  ## TAGEAR A IMAGEM COM A TAG PRERELEASE QUE BUSCAMOS DO GITHUB
-  - name: Gerando Tags e Labels para usar na imagem
-    id: meta
-    uses: docker/metadata-action@v4
-    with:
-      images: ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}
-      flavor: latest=true
-      tags: |
-        type=raw,value=${{ env.TAG }}
-        type=sha,format=long,prefix=
-      labels: |
-        org.opencontainers.image.version=${{ env.TAG }}
-
-  - name: Build e Push da Imagem Docker (se aplicável)
-    if: ${{ inputs.DOCKERFILE_PATH != '' }}
-    uses: docker/build-push-action@v3
-    with:
-      context: .
-      file: ${{ inputs.DOCKERFILE_PATH }}
-      # tags: ${{ steps.meta.outputs.tags }}
-      tags: |
-        ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ env.TAG }}
-        ${{ steps.meta.outputs.tags }}
-      labels: ${{ steps.meta.outputs.labels }}
-      push: true
-      build-args: |
-        IMAGE=${{ inputs.BASE_IMAGE }}
-
-  - name: Exportando Summary
+  - name: Criando e Armazenando Artefato de Deploy
     run: |
-      echo "### Image tag :framed_picture:" >> $GITHUB_STEP_SUMMARY
-      # echo "$GITHUB_SHA" >> $GITHUB_STEP_SUMMARY
-      echo "${{ env.TAG }}" >> $GITHUB_STEP_SUMMARY
-    shell: bash
+      set -euo pipefail
 
-  # ##################  DEPLOY IMAGE # ##################
+      BRANCH_NAME="${GITHUB_REF##*/}"
 
-  - name: Criando e Armazenando Artefato de Deploy (se aplicável)
-    if: ${{ inputs.DEPLOY_FILES != '' }}
-    run: |
-      mkdir -p /tmp/deploy
-      set -f
+      if [[ "$BRANCH_NAME" == "main" ]]; then
+        echo "Branch é 'main', copiando estrutura de .infra/prod"
+        SOURCE_DIR=".infra/prod"
+        mkdir -p /tmp/deploy/api
+        mkdir -p /tmp/deploy/celery
+        mkdir -p /tmp/deploy/flower
 
-      for file in ${{ inputs.DEPLOY_FILES }}; do
-        echo "Copiando $file para /tmp/deploy/"
-        cp "$file" /tmp/deploy/ || { echo "Erro ao copiar $file"; exit 1; }
-      done
+        cp "$SOURCE_DIR/api/docker-compose.yml" /tmp/deploy/api/
+        cp "$SOURCE_DIR/celery/docker-compose.yml" /tmp/deploy/celery/
+        cp "$SOURCE_DIR/flower/docker-compose.yml" /tmp/deploy/flower/
+        cp "$SOURCE_DIR/Dockerfile" /tmp/deploy/
+
+      else
+        echo "Branch '$BRANCH_NAME', copiando estrutura de .infra/homol"
+        SOURCE_DIR=".infra/homol"
+        mkdir -p /tmp/deploy/
+
+        cp "$SOURCE_DIR/docker-compose.yml" /tmp/deploy/
+        cp "$SOURCE_DIR/Dockerfile" /tmp/deploy/
+      fi
 
       tar -czf /tmp/deploy.tar.gz -C /tmp/ deploy/
     shell: bash
@@ -270,24 +280,177 @@ runs:
   - name: Copiando o arquivo de Deploy para as instâncias EC2
     shell: bash
     run: |
+      # Verifica se a variável EC2_IPS está definida
+      if [ -z "$EC2_IPS" ]; then
+        echo "Erro: Nenhum IP de instância EC2 foi fornecido."
+        exit 1
+      fi
+
+      # Verifica se o arquivo deploy.tar.gz existe antes de copiar
+      if [ ! -f "deploy.tar.gz" ]; then
+        echo "Erro: O arquivo deploy.tar.gz não foi encontrado."
+        exit 1
+      fi
+
+      # Define as opções do SCP para maior segurança e eficiência
+      SCP_OPTIONS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ssh_key.pem"
+
       for IP in $EC2_IPS; do
-        echo "Copiando para $IP..."
-        scp -o StrictHostKeyChecking=no -i ssh_key.pem deploy.tar.gz ${{ inputs.SSH_USER }}@$IP:/tmp/
+        echo "Copiando deploy.tar.gz para $IP..."
+        
+        # Tenta copiar o arquivo e verifica se teve sucesso
+        if scp $SCP_OPTIONS deploy.tar.gz ${{ inputs.SSH_USER }}@$IP:/tmp/; then
+          echo "Arquivo copiado com sucesso para $IP."
+        else
+          echo "Erro ao copiar para $IP. Verifique a conexão SSH."
+          exit 1
+        fi
       done
 
-  - name: Executando comandos remotos nas instâncias EC2
+      echo "Cópia finalizada para todas as instâncias EC2."
+
+  - name: Criar lista de IPs formatada
+    shell: bash
+    run: |
+      if [[ $(echo ${{ env.EC2_IPS }} | wc -w) -gt 1 ]]; then
+        # Se houver mais de um IP, substitui espaços por vírgula
+        echo "EC2_IPS_COMMA=$(echo ${{ env.EC2_IPS }} | sed 's/ /,/g')" >> $GITHUB_ENV
+      else
+        # Se houver apenas um IP, mantém como está
+        echo "EC2_IPS_COMMA=${{ env.EC2_IPS }}" >> $GITHUB_ENV
+      fi
+
+  - name: Manipulando tag nova no manifestos
     uses: appleboy/ssh-action@master
     with:
       username: ${{ inputs.SSH_USER }}
       key_path: ssh_key.pem
-      host: ${{ env.EC2_IPS }}
+      host: ${{ env.EC2_IPS_COMMA }}
       script: |
         set -e
+        # Extrai o artefato de deploy
         tar -xzf /tmp/deploy.tar.gz -C /tmp/
-        # export GITHUB_COMMIT=${{ github.sha }}
+
+        # Define a tag e a branch de destino
         export GITHUB_COMMIT=${{ env.TAG }}
-        bash /tmp/deploy/up.sh
-        rm -rf /tmp/deploy /tmp/deploy.tar.gz
+        BRANCH_NAME="rc/$GITHUB_COMMIT"
+
+        cd /home/ubuntu/log-attributes/
+
+        echo "Baixando todas as branches e tags remotas..."
+        git fetch --all --prune
+
+        echo "Commitando mudanças antes de trocar para $BRANCH_NAME..."
+        git config --global user.email "github-actions@github.com"
+        git config --global user.name "GitHub Actions"
+        git add .
+        git commit -m "Atualização automática do Dockerfile antes de trocar para a branch $BRANCH_NAME" || echo "Nenhuma mudança para commit."
+
+        if git ls-remote --exit-code --heads origin "$BRANCH_NAME" >/dev/null; then
+            echo "Trocando para a branch $BRANCH_NAME..."
+            git checkout "$BRANCH_NAME"
+            git reset --hard origin/"$BRANCH_NAME"
+            git pull origin "$BRANCH_NAME"
+        else
+            echo "Erro: A branch '$BRANCH_NAME' não existe remotamente."
+            exit 1
+        fi
+
+        # Atualiza a referência da tag :latest para a nova tag no(s) Dockerfile(s)
+        find /tmp/deploy -type f -name 'Dockerfile' -exec sed -i "s|:latest|:${GITHUB_COMMIT}|g" {} +
+
+        # Copia os arquivos extraídos para os diretórios corretos conforme a branch
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "Branch é 'main', copiando para .infra/prod"
+            TARGET_DIR="/home/ubuntu/log-attributes/.infra/prod"
+            mkdir -p "$TARGET_DIR/api" "$TARGET_DIR/celery" "$TARGET_DIR/flower"
+            
+            # Para o ambiente de produção, os arquivos foram organizados em subpastas:
+            mv /tmp/deploy/Dockerfile "$TARGET_DIR/"
+            mv /tmp/deploy/api/docker-compose.yml "$TARGET_DIR/api/"
+            mv /tmp/deploy/celery/docker-compose.yml "$TARGET_DIR/celery/"
+            mv /tmp/deploy/flower/docker-compose.yml "$TARGET_DIR/flower/"
+        else
+            echo "Branch não é 'main', copiando para .infra/homol"
+            TARGET_DIR="/home/ubuntu/log-attributes/.infra/homol"
+            mkdir -p "$TARGET_DIR/"
+            
+            # Para ambiente de homologação, os arquivos estão na raiz do diretório
+            mv /tmp/deploy/Dockerfile "$TARGET_DIR/"
+            mv /tmp/deploy/docker-compose.yml "$TARGET_DIR/"
+        fi
+
+  - name: Subindo nova tag
+    uses: appleboy/ssh-action@master
+    with:
+      username: ${{ inputs.SSH_USER }}
+      key_path: ssh_key.pem
+      host: ${{ env.EC2_IPS_COMMA }}
+      script: |
+        set -e
+
+        echo "Autenticando no ECR..."
+        aws ecr get-login-password --region sa-east-1 | docker login --username AWS --password-stdin 081818032380.dkr.ecr.sa-east-1.amazonaws.com
+
+        echo "Definindo utilitário para verificar containers..."
+        container_exists() {
+          local container_name="$1"
+          docker ps --format '{{.Names}}' | grep -q "$container_name"
+        }
+
+        ENV_PATH="/home/ubuntu/log-attributes/.env"
+        S3_ENV_PATH="s3://logcomex-environments-files/log-attributes/.env.homol"
+        INFRA_PATH="/home/ubuntu/log-attributes/.infra/homol"
+        IS_PROD=false
+
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Branch é 'main', alterando para ambiente de produção..."
+          S3_ENV_PATH="s3://logcomex-environments-files/log-attributes/.env.prod"
+          INFRA_PATH="/home/ubuntu/log-attributes/.infra/prod"
+          IS_PROD=true
+        fi
+
+        echo "Baixando o arquivo de ambiente do S3..."
+        if aws s3 ls "$S3_ENV_PATH" > /dev/null 2>&1; then
+          aws s3 cp "$S3_ENV_PATH" "$ENV_PATH"
+        else
+          echo "Erro: O arquivo $S3_ENV_PATH não foi encontrado no S3."
+          exit 1
+        fi
+
+        echo "Verificando containers antes de subir serviços:"
+        docker ps --format ' - {{.Names}}'
+
+        if [[ "$IS_PROD" == "true" ]]; then
+          echo "Iniciando serviços para ambiente de produção..."
+
+          for SERVICE in api celery flower; do
+            if container_exists "$SERVICE"; then
+              echo "Subindo serviço $SERVICE..."
+              cd "$INFRA_PATH/$SERVICE"
+              docker-compose up -d --build --force-recreate
+              sleep 5
+              docker cp "$ENV_PATH" "$SERVICE":/var/www/.env || echo "Falha ao copiar .env para $SERVICE."
+            else
+              echo "Container $SERVICE não está presente nesta máquina. Pulando..."
+            fi
+          done
+        else
+          echo "Iniciando serviço para ambiente de homologação (estrutura simples na raiz)..."
+          cd "$INFRA_PATH"
+          docker-compose up -d --build --force-recreate
+          sleep 5
+
+          echo "Identificando containers reais criados por docker-compose..."
+          CONTAINER_NAMES=$(docker-compose ps -q | xargs docker inspect --format '{{ .Name }}' | sed 's|/||g')
+
+          for CONTAINER in $CONTAINER_NAMES; do
+            echo "Copiando .env para o container $CONTAINER..."
+            docker cp "$ENV_PATH" "$CONTAINER":/var/www/.env || echo "Falha ao copiar .env para $CONTAINER."
+          done
+        fi
+
+        echo "Processo finalizado com sucesso."
 
   - name: Encerrando a VPN (se aplicável)
     if: always() && inputs.OVPN_CONFIG_FILE != ''
@@ -296,16 +459,6 @@ runs:
       echo "Desconectando VPN..."
       sudo killall openvpn
       sleep 5
-
-  - name: Definir Release como Latest
-    if: github.ref == 'refs/heads/main'
-    shell: bash
-    run: |
-      echo "Atualizando a release ${{ env.TAG }} para remover pré-release e marcar como latest..."
-
-      gh release edit ${{ env.TAG }} --prerelease=false --latest
-    env:
-      GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
 
   - name: Criar PR para main se a branch for RC
     if: startsWith(github.ref, 'refs/heads/rc/')
@@ -318,8 +471,16 @@ runs:
       PR_TITLE="[RC] branch $CURRENT_BRANCH to Main"
       PR_BODY="Pull Request RC to Main"
 
-      echo "Criando PR: $PR_TITLE"
+      echo "Verificando se a PR já existe..."
 
+      EXISTING_PR=$(gh pr list --base main --head "$CURRENT_BRANCH" --json number --jq '.[0].number')
+
+      if [[ -n "$EXISTING_PR" ]]; then
+        echo "Pull Request já existe: #$EXISTING_PR"
+        exit 0
+      fi
+
+      echo "Criando PR: $PR_TITLE"
       gh pr create --base="main" --head="$CURRENT_BRANCH" --title="$PR_TITLE" --body="$PR_BODY"
     env:
       GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
